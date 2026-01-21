@@ -1,0 +1,18 @@
+/* 项目样式文件 */
+/* 主要样式已在 index.html 中通过内联样式和 Tailwind CSS 定义 */
+
+/* Toast 动画 */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out;
+}

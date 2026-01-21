@@ -1,0 +1,1269 @@
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { StrategyNode, Task, Level, Metric, ReportItem, ReportTag, TaskReport, User, AuditLog, TaskStatus } from './types';
+import { TODAY_STR, PROJECT_START, PROJECT_END, formatDate, getDayOffset, getMonthRange, getWeekRange, MOCK_USERS, AVATAR_COLORS } from './constants';
+import Icon from './components/Icon';
+import { suggestL4Tasks, generateWeeklyReport } from './services/aiService';
+import { AuthContainer, type AuthMode } from './components/Auth/AuthContainer';
+import { Sidebar } from './components/Sidebar/Sidebar';
+import { Header } from './components/Header/Header';
+import { FilterPanel } from './components/FilterPanel/FilterPanel';
+import { GanttChart } from './components/GanttChart/GanttChart';
+import { TaskList } from './components/TaskList/TaskList';
+import { MapModal } from './components/Modal/MapModal';
+import { UserManagementModal } from './components/Modal/UserManagementModal';
+import { AuditLogModal } from './components/Modal/AuditLogModal';
+import { StrategyModal } from './components/Modal/StrategyModal';
+import { TaskModal } from './components/Modal/TaskModal';
+import { ReportModal } from './components/Modal/ReportModal';
+import { ImportModal } from './components/Modal/ImportModal';
+import { ToastContainer, type ToastType } from './components/Toast';
+import {
+  validateLogin,
+  validateRegister,
+  validateResetPassword,
+  saveLoginState,
+  clearLoginState,
+  createLoginLog,
+  createRegisterLog,
+  createLogoutLog,
+  createResetPasswordLog,
+} from './services/authService';
+import {
+  STORAGE_KEYS,
+  saveToStorage,
+  loadFromStorage,
+  saveBatch,
+  removeFromStorage,
+  setDataVersion,
+  getDataVersion,
+  needsMigration,
+  createBackup,
+  validateData,
+  type Validator
+} from './services/storageService';
+
+// --- Helper Functions ---
+const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 999)}`;
+
+const exportToCSV = (tasks: Task[], strategies: StrategyNode[], filteredStrategies: StrategyNode[], showToast?: (type: ToastType, message: string) => void) => {
+  // 检查是否有数据
+  if ((!tasks || tasks.length === 0) && (!filteredStrategies || filteredStrategies.length === 0)) {
+    if (showToast) {
+      showToast('error', '没有可导出的数据');
+    } else {
+      alert('没有可导出的数据');
+    }
+    return;
+  }
+
+  const strategyMap = new Map(strategies.map(s => [s.id, s]));
+  
+  // 辅助函数：安全地转义 CSV 字段
+  const escapeCSV = (value: any): string => {
+    if (value === null || value === undefined) return '';
+    const str = String(value);
+    // 如果包含逗号、引号或换行符，需要用引号包裹并转义引号
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
+  // 表头：包含层级信息和 Report 信息
+  const headers = [
+    'Level',           // L1, L2, L3, L4
+    'L1 Name',         // L1 策略名称
+    'L2 Name',         // L2 策略名称
+    'L3 Name',         // L3 策略名称
+    'L4 Task ID',      // L4 任务 ID
+    'L4 Task Content', // L4 任务内容
+    'Task Status',     // 任务状态
+    'Task Progress',   // 任务进度
+    'Task Priority',   // 任务优先级
+    'Task Owner',      // 任务负责人
+    'Task Start Date', // 任务开始日期
+    'Task End Date',   // 任务结束日期
+    'Task Product',    // 任务产品
+    'Task Channel',    // 任务渠道
+    'Task Score',      // 任务评分
+    'Task Reviewer',   // 任务审核人
+    'Task Notes',      // 任务备注
+    'Report ID',       // 报告 ID
+    'Report Type',     // 报告类型（计划/进展/问题/结果/复盘）
+    'Report Content',  // 报告内容
+    'Report Timestamp' // 报告时间戳
+  ];
+  
+  const rows: string[] = [];
+  
+  // 辅助函数：获取策略节点的所有父级
+  const getStrategyHierarchy = (strategy: StrategyNode): { l1: StrategyNode | null, l2: StrategyNode | null, l3: StrategyNode | null } => {
+    let l1: StrategyNode | null = null;
+    let l2: StrategyNode | null = null;
+    let l3: StrategyNode | null = null;
+    
+    if (strategy.level === 1) {
+      l1 = strategy;
+    } else if (strategy.level === 2) {
+      l2 = strategy;
+      l1 = strategy.parentId ? strategyMap.get(strategy.parentId) || null : null;
+    } else if (strategy.level === 3) {
+      l3 = strategy;
+      const parent = strategy.parentId ? strategyMap.get(strategy.parentId) : null;
+      if (parent) {
+        l2 = parent;
+        l1 = parent.parentId ? strategyMap.get(parent.parentId) || null : null;
+      }
+    }
+    
+    return { l1, l2, l3 };
+  };
+  
+  // 1. 导出策略节点（L1-L3）- 每个策略一行，没有 Report
+  filteredStrategies.forEach(strategy => {
+    const { l1, l2, l3 } = getStrategyHierarchy(strategy);
+    
+    rows.push([
+      escapeCSV(`L${strategy.level}`),
+      escapeCSV(l1?.name || ''),
+      escapeCSV(l2?.name || ''),
+      escapeCSV(l3?.name || ''),
+      '', // L4 Task ID
+      '', // L4 Task Content
+      '', // Task Status
+      '', // Task Progress
+      '', // Task Priority
+      escapeCSV(strategy.owner || ''),
+      escapeCSV(strategy.start || ''),
+      escapeCSV(strategy.end || ''),
+      escapeCSV(strategy.product || ''),
+      escapeCSV(strategy.channel || ''),
+      '', // Task Score
+      '', // Task Reviewer
+      escapeCSV(strategy.description || ''),
+      '', // Report ID
+      '', // Report Type
+      '', // Report Content
+      ''  // Report Timestamp
+    ].join(','));
+  });
+  
+  // 2. 导出任务（L4）- 每个任务的每个 Report 一行
+  tasks.forEach(task => {
+    const l3 = strategyMap.get(task.parentId);
+    const l2 = l3?.parentId ? strategyMap.get(l3.parentId) : null;
+    const l1 = l2?.parentId ? strategyMap.get(l2.parentId) : null;
+    
+    // 如果任务有 reports，每个 report 一行
+    if (task.reports && task.reports.length > 0) {
+      task.reports.forEach(report => {
+        rows.push([
+          escapeCSV('L4'),
+          escapeCSV(l1?.name || ''),
+          escapeCSV(l2?.name || ''),
+          escapeCSV(l3?.name || ''),
+          escapeCSV(task.id),
+          escapeCSV(task.text),
+          escapeCSV(task.status),
+          escapeCSV(`${task.progress}%`),
+          escapeCSV(task.priority),
+          escapeCSV(task.owner),
+          escapeCSV(task.start),
+          escapeCSV(task.end),
+          escapeCSV(task.product),
+          escapeCSV(task.channel),
+          escapeCSV(task.score || ''),
+          escapeCSV(task.reviewer || ''),
+          escapeCSV(task.notes || ''),
+          escapeCSV(report.id),
+          escapeCSV(report.type),
+          escapeCSV(report.content),
+          escapeCSV(report.timestamp)
+        ].join(','));
+      });
+    } else {
+      // 如果任务没有 reports，仍然导出一行（Report 字段为空）
+      rows.push([
+        escapeCSV('L4'),
+        escapeCSV(l1?.name || ''),
+        escapeCSV(l2?.name || ''),
+        escapeCSV(l3?.name || ''),
+        escapeCSV(task.id),
+        escapeCSV(task.text),
+        escapeCSV(task.status),
+        escapeCSV(`${task.progress}%`),
+        escapeCSV(task.priority),
+        escapeCSV(task.owner),
+        escapeCSV(task.start),
+        escapeCSV(task.end),
+        escapeCSV(task.product),
+        escapeCSV(task.channel),
+        escapeCSV(task.score || ''),
+        escapeCSV(task.reviewer || ''),
+        escapeCSV(task.notes || ''),
+        '', // Report ID
+        '', // Report Type
+        '', // Report Content
+        ''  // Report Timestamp
+      ].join(','));
+    }
+  });
+
+  // 构建 CSV 内容：BOM + 表头 + 数据行
+  const csvContent = "\uFEFF" + [headers.join(','), ...rows].join('\r\n');
+  
+  // 创建 Blob 并下载
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `fotopro_report_${formatDate(new Date())}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  // 清理 URL 对象
+  setTimeout(() => URL.revokeObjectURL(url), 100);
+  
+  // CSV export completed
+};
+
+// --- Initial Data ---
+const INIT_STRATEGIES: StrategyNode[] = [
+  { 
+    id: 'L1-1', level: 1, name: '2026 全球品牌心智工程', parentId: null, start: '2026-01-01', end: '2026-12-31', owner: 'CEO', status: 'active', channel: 'Global', product: 'All', tags: ['品牌', '年度'],
+    metrics: [{ id: 'm1', label: '全球市占率', value: '15%', description: '核心影像市场 (不含手机配件)' }]
+  },
+  { 
+    id: 'L2-1', level: 2, name: '北美市场扩张', parentId: 'L1-1', start: '2026-01-01', end: '2026-06-30', owner: 'VP Sales', status: 'active', group: 'A组: 直营', channel: 'Amazon/Indie', product: 'Tripods', tags: ['增长'],
+    metrics: [{ id: 'm2', label: 'Q1 Revenue', value: '$3.5M', description: '同比 +40%，主要来自 Amazon 渠道' }] 
+  },
+  { id: 'L2-2', level: 2, name: '北美市场代理制', parentId: 'L1-1', start: '2026-01-01', end: '2026-06-30', owner: 'VP Channel', metrics: [], status: 'delayed', group: 'B组: 代理', channel: 'Distributors', product: 'Tripods', tags: ['B2B'] },
+  { id: 'L3-1', level: 3, name: '洛杉矶旗舰店落地', parentId: 'L2-1', start: '2026-01-01', end: '2026-03-31', owner: 'Director', metrics: [], status: 'active', channel: 'Retail', product: 'Store', tags: ['线下'] },
+];
+
+const INIT_TASKS: Task[] = [
+  { id: 't1', parentId: 'L3-1', rootId: 'L1-1', text: '签署租赁合同', start: '2026-01-05', end: '2026-01-10', status: 'confirmed', progress: 100, owner: '法务', product: '-', channel: '线下', priority: 'P0', notes: '已完成归档', reviewer: 'CEO', score: 95, reports: [{ id: 'rpt1', type: '结果', content: '合同已双签归档，押金已付。', timestamp: '2026-01-10' }] },
+  { id: 't2', parentId: 'L3-1', rootId: 'L1-1', text: '首批装修进场', start: '2026-01-12', end: '2026-02-15', status: 'in_progress', progress: 30, owner: '工程部', product: '-', channel: '线下', priority: 'P1', notes: '材料运输延迟', reports: [{ id: 'rpt2', type: '问题', content: '海运物流延期导致主材未到场。', timestamp: '2026-01-15' }] },
+];
+
+interface ModalState {
+  isOpen: boolean;
+  mode: 'create' | 'edit';
+  data: Partial<StrategyNode> & { tagsString?: string };
+}
+
+const DEFAULT_MODAL_DATA = {
+  name: '',
+  level: 1 as Level,
+  parentId: '',
+  owner: '',
+  group: '',
+  channel: '',
+  product: '',
+  tagsString: '',
+  metrics: [] as Metric[],
+  start: PROJECT_START,
+  end: formatDate(new Date(new Date(PROJECT_START).getTime() + 90 * 86400000)),
+};
+
+// 注意：TAG_STYLES 和 STATUS_CONFIG 已移至各个组件内部
+
+// Filter Types
+interface Filters {
+    owner: string;
+    channel: string;
+    product: string;
+    tag: string;
+    time: 'all' | 'today' | 'week' | 'month' | 'custom';
+    customStartDate?: string;
+    customEndDate?: string;
+}
+
+// --- Data Validators (移到组件外部，避免初始化顺序问题) ---
+const strategyValidator: Validator<StrategyNode[]> = (data) => {
+  if (!Array.isArray(data)) {
+    return { valid: false, error: '策略数据必须是数组' };
+  }
+  for (const s of data) {
+    if (!s.id || !s.name || !s.level) {
+      return { valid: false, error: '策略数据格式不完整：缺少 id、name 或 level' };
+    }
+  }
+  return { valid: true };
+};
+
+const taskValidator: Validator<Task[]> = (data) => {
+  if (!Array.isArray(data)) {
+    return { valid: false, error: '任务数据必须是数组' };
+  }
+  for (const t of data) {
+    if (!t.id || !t.text || !Array.isArray(t.reports)) {
+      return { valid: false, error: '任务数据格式不完整：缺少 id、text 或 reports 数组' };
+    }
+  }
+  return { valid: true };
+};
+
+const auditLogValidator: Validator<AuditLog[]> = (data) => {
+  if (!Array.isArray(data)) {
+    return { valid: false, error: '审计日志数据必须是数组' };
+  }
+  return { valid: true };
+};
+
+const userValidator: Validator<User[]> = (data) => {
+  if (!Array.isArray(data)) {
+    return { valid: false, error: '用户数据必须是数组' };
+  }
+  for (const u of data) {
+    if (!u.id || !u.username) {
+      return { valid: false, error: '用户数据格式不完整：缺少 id 或 username' };
+    }
+  }
+  return { valid: true };
+};
+
+const App: React.FC = () => {
+  // --- Auth State ---
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
+  
+  // Initialize users from LocalStorage or fall back to Mock users
+  const [users, setUsers] = useState<User[]>(() => {
+    const result = loadFromStorage<User[]>(STORAGE_KEYS.USERS_DB, MOCK_USERS, userValidator);
+    return result.success && result.data ? result.data : MOCK_USERS;
+  });
+
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  const [registerData, setRegisterData] = useState({
+      username: '',
+      password: '',
+      confirmPassword: ''
+  });
+  
+  // --- Admin User Management State ---
+  const [isUserMgmtOpen, setIsUserMgmtOpen] = useState(false);
+  const [newUser, setNewUser] = useState({ username: '', password: '' });
+
+  // --- Data State ---
+  const [strategies, setStrategies] = useState<StrategyNode[]>(INIT_STRATEGIES);
+  const [tasks, setTasks] = useState<Task[]>(INIT_TASKS);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+
+  const [activeNodeId, setActiveNodeId] = useState<string>('L1-1');
+  const [ganttScale, setGanttScale] = useState(10);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  
+  // --- UI State ---
+  const [filters, setFilters] = useState<Filters>({
+    owner: 'all', channel: 'all', product: 'all', tag: 'all', time: 'all'
+  });
+  const [isFilterCollapsed, setIsFilterCollapsed] = useState(false);
+  const [isGanttCollapsed, setIsGanttCollapsed] = useState(false);
+  
+  // 甘特图折叠切换函数 - 使用 useCallback 避免重复创建
+  const handleGanttToggle = useCallback(() => {
+    setIsGanttCollapsed(prev => !prev);
+  }, []);
+  
+  const [ganttHeight, setGanttHeight] = useState<number>(320);
+  const [isListCollapsed, setIsListCollapsed] = useState(false);
+  const [listHeight, setListHeight] = useState<number>(400);
+
+  // Sidebar Tree State
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['L1-1', 'L2-1', 'L3-1']));
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false);
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  
+  // Toast 通知状态
+  const [toasts, setToasts] = useState<Array<{ id: string; type: ToastType; message: string }>>([]);
+
+  // Strategy Modal State
+  const [modal, setModal] = useState<ModalState>({
+    isOpen: false, mode: 'create', data: { ...DEFAULT_MODAL_DATA }
+  });
+
+  // Task Edit Modal State
+  const [taskModal, setTaskModal] = useState<{ isOpen: boolean; data: Task | null }>({
+    isOpen: false, data: null
+  });
+
+  // Confirmation Modal State
+  const [confirmState, setConfirmState] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void }>({
+    isOpen: false, title: '', message: '', onConfirm: () => {}
+  });
+
+  // Report Modal State
+  const [reportModal, setReportModal] = useState<{ isOpen: boolean; items: ReportItem[]; isGenerating: boolean }>({
+    isOpen: false, items: [], isGenerating: false
+  });
+
+  // Resize Ref
+  const resizeRef = useRef<{ startY: number, startHeight: number, setter: (h: number) => void } | null>(null);
+
+  // --- Resize Logic ---
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+        if (resizeRef.current) {
+            const delta = e.clientY - resizeRef.current.startY;
+            resizeRef.current.setter(Math.max(150, resizeRef.current.startHeight + delta));
+        }
+    };
+    const handleMouseUp = () => {
+        resizeRef.current = null;
+        document.body.style.cursor = 'default';
+        document.body.style.userSelect = 'auto';
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  const startResize = (e: React.MouseEvent, setter: (h: number) => void, currentHeight: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizeRef.current = { startY: e.clientY, startHeight: currentHeight, setter };
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  // 使用 ref 跟踪是否已初始化，避免首次加载时覆盖数据
+  const isInitializedRef = useRef(false);
+  
+  // 错误提示状态
+  const [storageError, setStorageError] = useState<string | null>(null);
+
+  // 注意：数据验证器已移至组件外部（第 275-318 行），避免初始化顺序问题
+
+  // --- Persistence ---
+  useEffect(() => {
+    // 检查数据版本，如果需要迁移则处理
+    if (needsMigration()) {
+      const currentVersion = getDataVersion();
+      console.warn(`数据版本不匹配：当前 ${currentVersion}，期望 2.0。将使用现有数据。`);
+      // 未来可以在这里添加数据迁移逻辑
+    }
+    
+    // 设置当前数据版本
+    setDataVersion();
+
+    // 加载策略数据
+    const strategiesResult = loadFromStorage<StrategyNode[]>(STORAGE_KEYS.STRATEGY, INIT_STRATEGIES, strategyValidator);
+    if (strategiesResult.success && strategiesResult.data) {
+      setStrategies(strategiesResult.data);
+    } else if (strategiesResult.error) {
+      console.error('加载策略数据失败:', strategiesResult.error);
+      setStorageError(`加载策略数据失败: ${strategiesResult.error}`);
+      setStrategies(INIT_STRATEGIES);
+    }
+
+    // 加载任务数据
+    const tasksResult = loadFromStorage<Task[]>(STORAGE_KEYS.TASKS, INIT_TASKS, taskValidator);
+    if (tasksResult.success && tasksResult.data) {
+      // 数据迁移：确保 reports 数组被正确恢复
+      const migratedTasks = tasksResult.data.map((t: any) => {
+        const reports = Array.isArray(t.reports) ? t.reports : [];
+        return {
+            ...t, 
+          reports: reports,
+            status: t.status || (t.done ? 'completed' : 'todo'),
+            reviewer: t.reviewer || '',
+          score: t.score || undefined,
+          notes: t.notes || '',
+          owner: t.owner || '',
+          product: t.product || '',
+          channel: t.channel || '',
+          priority: t.priority || 'P2',
+          progress: t.progress !== undefined ? t.progress : (t.status === 'completed' || t.status === 'confirmed' ? 100 : 0)
+        };
+      });
+        setTasks(migratedTasks);
+    } else if (tasksResult.error) {
+      console.error('加载任务数据失败:', tasksResult.error);
+      setStorageError(`加载任务数据失败: ${tasksResult.error}`);
+      setTasks(INIT_TASKS);
+    }
+
+    // 加载审计日志
+    const logsResult = loadFromStorage<AuditLog[]>(STORAGE_KEYS.LOGS, [], auditLogValidator);
+    if (logsResult.success && logsResult.data) {
+      setAuditLogs(logsResult.data);
+    } else if (logsResult.error) {
+      console.error('加载审计日志失败:', logsResult.error);
+    }
+
+    // 加载用户数据
+    const usersResult = loadFromStorage<User[]>(STORAGE_KEYS.USERS_DB, MOCK_USERS, userValidator);
+    if (usersResult.success && usersResult.data) {
+      setUsers(usersResult.data);
+    } else if (usersResult.error) {
+      console.error('加载用户数据失败:', usersResult.error);
+      setUsers(MOCK_USERS);
+    }
+
+    // 加载当前登录用户
+    const userResult = loadFromStorage<User | null>(STORAGE_KEYS.USER, null);
+    if (userResult.success && userResult.data) {
+      setCurrentUser(userResult.data);
+    }
+
+    // 标记为已初始化
+    isInitializedRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    // 只在初始化完成后才保存，避免首次加载时覆盖数据
+    if (!isInitializedRef.current) {
+      return;
+    }
+    
+    const saveData = () => {
+      // 批量保存所有数据（原子操作）
+      const saveResult = saveBatch([
+        { key: STORAGE_KEYS.STRATEGY, data: strategies, validator: strategyValidator },
+        { key: STORAGE_KEYS.TASKS, data: tasks, validator: taskValidator },
+        { key: STORAGE_KEYS.LOGS, data: auditLogs, validator: auditLogValidator },
+        { key: STORAGE_KEYS.USERS_DB, data: users, validator: userValidator }
+      ]);
+
+      if (!saveResult.success) {
+        console.error('数据保存失败:', saveResult.error);
+        setStorageError(`数据保存失败: ${saveResult.error}`);
+        // 3 秒后清除错误提示
+        setTimeout(() => setStorageError(null), 3000);
+      } else {
+        // 保存成功，清除之前的错误提示
+        if (storageError) {
+          setStorageError(null);
+        }
+      }
+    };
+    
+    // 延迟保存，确保状态已更新
+    const timeoutId = setTimeout(saveData, 100);
+    return () => clearTimeout(timeoutId);
+  }, [strategies, tasks, auditLogs, users]);
+
+  // --- Toast 通知系统 ---
+  const showToast = (type: ToastType, message: string) => {
+    const id = generateId('toast');
+    setToasts(prev => [...prev, { id, type, message }]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  // --- Logging System ---
+  const addLog = (
+      action: 'LOGIN' | 'CREATE' | 'UPDATE' | 'DELETE' | 'REPORT',
+      targetType: 'STRATEGY' | 'TASK' | 'SYSTEM',
+      targetName: string,
+      details: string
+  ) => {
+      if (!currentUser) return;
+      
+      const newLog: AuditLog = {
+          id: generateId('log'),
+          userId: currentUser.id,
+          userName: currentUser.username,
+          action,
+          targetType,
+          targetName,
+          details,
+          timestamp: new Date().toISOString()
+      };
+      setAuditLogs(prev => [newLog, ...prev].slice(0, 500));
+  };
+
+  // --- Auth Actions ---
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const result = validateLogin(loginUsername, loginPassword, users);
+    
+    if (result.success && result.user) {
+      setCurrentUser(result.user);
+      
+      const saveResult = saveLoginState(result.user);
+      if (!saveResult.success) {
+        console.error('保存登录状态失败:', saveResult.error);
+        setStorageError(`保存登录状态失败: ${saveResult.error}`);
+      }
+      
+      const loginLog = createLoginLog(result.user);
+      loginLog.userId = result.user.id; // 设置 userId
+        setAuditLogs(prev => [loginLog, ...prev]);
+
+        setLoginError('');
+        setLoginUsername('');
+        setLoginPassword('');
+    } else {
+      setLoginError(result.error || '登录失败');
+    }
+  };
+
+  const handleRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    const result = validateRegister(
+      registerData.username,
+      registerData.password,
+      registerData.confirmPassword,
+      users
+    );
+
+    if (result.success && result.user) {
+      setUsers(prev => [...prev, result.user!]);
+      setCurrentUser(result.user);
+      
+      const saveResult = saveLoginState(result.user);
+      if (!saveResult.success) {
+        console.error('保存登录状态失败:', saveResult.error);
+        setStorageError(`保存登录状态失败: ${saveResult.error}`);
+      }
+
+      const registerLog = createRegisterLog(result.user);
+      registerLog.userId = result.user.id; // 设置 userId
+      setAuditLogs(prev => [registerLog, ...prev]);
+
+    setRegisterData({ username: '', password: '', confirmPassword: '' });
+    setLoginError('');
+    } else {
+      setLoginError(result.error || '注册失败');
+    }
+  };
+
+  const handleResetPassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    const result = validateResetPassword(
+      registerData.username,
+      registerData.password,
+      registerData.confirmPassword,
+      users
+    );
+
+    if (result.success && result.updatedUser) {
+      setUsers(prev => prev.map(u => 
+        u.id === result.updatedUser!.id ? result.updatedUser! : u
+      ));
+
+      const resetLog = createResetPasswordLog(result.updatedUser);
+      resetLog.userId = result.updatedUser.id; // 设置 userId
+      setAuditLogs(prev => [resetLog, ...prev]);
+
+    setRegisterData({ username: '', password: '', confirmPassword: '' });
+    setLoginError('');
+      setLoginUsername(registerData.username);
+    setAuthMode('login');
+    showToast('success', '密码更新成功，请使用新密码登录');
+    } else {
+      setLoginError(result.error || '重置密码失败');
+    }
+  };
+
+  const handleLogout = () => {
+    if (currentUser) {
+      const logoutLog = createLogoutLog(currentUser);
+      logoutLog.userId = currentUser.id; // 设置 userId
+      setAuditLogs(prev => [logoutLog, ...prev]);
+    }
+    
+    setCurrentUser(null);
+    const clearResult = clearLoginState();
+    if (!clearResult.success) {
+      console.error('清除登录状态失败:', clearResult.error);
+    }
+    setAuthMode('login'); 
+  };
+  
+  // --- Admin User Management ---
+  const handleAddUser = () => {
+    // 获取并清理输入值
+    const username = (newUser.username || '').trim();
+    const password = (newUser.password || '').trim();
+    
+    // 验证字段
+    if (!username) {
+      showToast('error', '请输入用户名');
+      return;
+    }
+    
+    if (!password) {
+      showToast('error', '请输入密码');
+      return;
+    }
+    
+    // 检查用户名是否已存在（使用函数式更新获取最新状态）
+    setUsers(prev => {
+      // 检查用户名是否已存在（不区分大小写）
+      if (prev.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+        showToast('error', '用户名已存在');
+        return prev; // 返回原数组，不添加
+      }
+      
+      // 创建新用户
+    const u: User = {
+        id: generateId('user'),
+        username: username,
+        password: password,
+        role: 'User',
+        avatarColor: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]
+    };
+    
+      // 记录日志
+      addLog('CREATE', 'SYSTEM', u.username, 'Admin manually created user');
+      
+      // 显示成功消息
+      showToast('success', `用户 "${u.username}" 创建成功！`);
+      
+    // PREPEND to the list (so it shows at top), instead of appending
+      return [u, ...prev];
+    });
+    
+    // 重置输入框
+    setNewUser({ username: '', password: '' });
+  };
+
+  const handleDeleteUser = (id: string) => {
+    if (id === currentUser?.id) {
+      showToast('error', '不能删除当前登录的用户');
+      return;
+    }
+    const u = users.find(user => user.id === id);
+    if (!u) return;
+    
+    safeConfirm("Delete User", `Are you sure you want to delete user "${u.username}"?`, () => {
+        // 使用函数式更新确保使用最新状态
+        setUsers(prev => prev.filter(user => user.id !== id));
+        setConfirmState(prev => ({...prev, isOpen: false}));
+        addLog('DELETE', 'SYSTEM', u.username, 'Admin deleted user');
+    });
+  };
+
+  // --- Derived Data & Functions (Unchanged) ---
+  const activeNode = strategies.find(s => s.id === activeNodeId) || strategies[0];
+  const getDescendantIds = (nodeId: string): string[] => {
+    const children = strategies.filter(s => s.parentId === nodeId);
+    let ids = [nodeId];
+    children.forEach(c => { ids = [...ids, ...getDescendantIds(c.id)]; });
+    return ids;
+  };
+  const activeBranchIds = useMemo(() => getDescendantIds(activeNodeId), [activeNodeId, strategies]);
+  const allBranchTasks = useMemo(() => {
+    return tasks.filter(t => activeBranchIds.includes(t.parentId)).sort((a,b) => a.start.localeCompare(b.start));
+  }, [tasks, activeBranchIds]);
+  const filterOptions = useMemo(() => {
+      const owners = new Set<string>(); const channels = new Set<string>(); const products = new Set<string>(); const tags = new Set<string>();
+      allBranchTasks.forEach(t => { if(t.owner) owners.add(t.owner); if(t.channel) channels.add(t.channel); if(t.product) products.add(t.product); });
+      const branchStrategies = strategies.filter(s => activeBranchIds.includes(s.id));
+      branchStrategies.forEach(s => { if (s.owner) owners.add(s.owner); if (s.channel) channels.add(s.channel); if (s.product) products.add(s.product); if (s.tags) s.tags.forEach(t => tags.add(t)); });
+      return { owners: Array.from(owners).sort(), channels: Array.from(channels).sort(), products: Array.from(products).sort(), tags: Array.from(tags).sort() };
+  }, [allBranchTasks, strategies, activeBranchIds]);
+  
+  // 收集所有已使用的标签（用于快捷选择）
+  const allUsedTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    strategies.forEach(s => {
+      if (s.tags && s.tags.length > 0) {
+        s.tags.forEach(tag => tagSet.add(tag));
+      }
+    });
+    return Array.from(tagSet).sort();
+  }, [strategies]);
+  const filteredStrategies = useMemo(() => {
+    return strategies.filter(s => {
+        if (!activeBranchIds.includes(s.id)) return false;
+        if (filters.owner !== 'all' && s.owner !== filters.owner) return false;
+        if (filters.channel !== 'all' && s.channel !== filters.channel) return false;
+        if (filters.product !== 'all' && s.product !== filters.product) return false;
+        if (filters.tag !== 'all' && (!s.tags || !s.tags.includes(filters.tag))) return false;
+        if (filters.time !== 'all') {
+              if (filters.time === 'today') { if (!(s.start <= TODAY_STR && s.end >= TODAY_STR)) return false; } 
+              else if (filters.time === 'week') { const { start, end } = getWeekRange(TODAY_STR); if (s.end < start || s.start > end) return false; } 
+              else if (filters.time === 'month') { const { start, end } = getMonthRange(TODAY_STR); if (s.end < start || s.start > end) return false; }
+              else if (filters.time === 'custom' && filters.customStartDate && filters.customEndDate) {
+                // 自定义日期范围：策略的时间范围与自定义范围有重叠
+                if (s.end < filters.customStartDate || s.start > filters.customEndDate) return false;
+              }
+        }
+        return true;
+    }).sort((a, b) => a.level - b.level || a.start.localeCompare(b.start));
+  }, [strategies, filters, activeBranchIds]);
+  const activeTasks = useMemo(() => {
+      return allBranchTasks.filter(t => {
+          if (filters.owner !== 'all' && t.owner !== filters.owner) return false;
+          if (filters.channel !== 'all' && t.channel !== filters.channel) return false;
+          if (filters.product !== 'all' && t.product !== filters.product) return false;
+          if (filters.tag !== 'all') { const parentStrategy = strategies.find(s => s.id === t.parentId); const parentTags = parentStrategy?.tags || []; if (!parentTags.includes(filters.tag)) return false; }
+          if (filters.time !== 'all') {
+              const start = t.start; const end = t.end;
+              if (filters.time === 'today') { if (!(start <= TODAY_STR && end >= TODAY_STR)) return false; } 
+              else if (filters.time === 'week') { const { start: wStart, end: wEnd } = getWeekRange(TODAY_STR); if (end < wStart || start > wEnd) return false; } 
+              else if (filters.time === 'month') { const { start: mStart, end: mEnd } = getMonthRange(TODAY_STR); if (end < mStart || start > mEnd) return false; }
+              else if (filters.time === 'custom' && filters.customStartDate && filters.customEndDate) {
+                // 自定义日期范围：任务的时间范围与自定义范围有重叠
+                if (end < filters.customStartDate || start > filters.customEndDate) return false;
+              }
+          }
+          return true;
+      });
+  }, [allBranchTasks, filters, strategies]);
+  const stats = useMemo(() => {
+    const total = activeTasks.length;
+    const completed = activeTasks.filter(t => t.status === 'completed' || t.status === 'confirmed').length;
+    const remaining = total - completed;
+    const rate = total === 0 ? 0 : Math.round((completed / total) * 100);
+    const start = new Date(activeNode.start).getTime(); const end = new Date(activeNode.end).getTime(); const now = new Date(TODAY_STR).getTime();
+    const oneDay = 24 * 60 * 60 * 1000; const totalDurationDays = Math.max(1, Math.ceil((end - start) / oneDay)); const daysElapsed = Math.max(0, Math.ceil((now - start) / oneDay));
+    const totalTime = end - start; const elapsedTime = Math.max(0, now - start); const timeUsedRate = totalTime <= 0 ? 100 : Math.min(100, Math.round((elapsedTime / totalTime) * 100));
+    const deviation = rate - timeUsedRate; const isBehind = deviation < 0;
+    return { total, completed, remaining, rate, timeUsedRate, daysElapsed, totalDurationDays, deviation, isBehind };
+  }, [activeTasks, activeNode]);
+
+  // --- Modal Helpers & Actions ---
+  const addMetric = () => { const newMetric: Metric = { id: generateId('m'), label: '', value: '', description: '' }; setModal(prev => ({ ...prev, data: { ...prev.data, metrics: [...(prev.data.metrics || []), newMetric] } })); };
+  const updateMetric = (index: number, field: keyof Metric, value: string) => { setModal(prev => { const newMetrics = [...(prev.data.metrics || [])]; newMetrics[index] = { ...newMetrics[index], [field]: value }; return { ...prev, data: { ...prev.data, metrics: newMetrics } }; }); };
+  const removeMetric = (index: number) => { setModal(prev => ({ ...prev, data: { ...prev.data, metrics: (prev.data.metrics || []).filter((_, i) => i !== index) } })); };
+  const openStrategyModal = (mode: 'create' | 'edit', level?: Level, parentId?: string | null, targetNode?: StrategyNode) => {
+    if (mode === 'create') { setModal({ isOpen: true, mode: 'create', data: { ...DEFAULT_MODAL_DATA, level: level || 1, parentId: parentId || '', start: parentId ? (strategies.find(s => s.id === parentId)?.start || PROJECT_START) : PROJECT_START, end: parentId ? (strategies.find(s => s.id === parentId)?.end || PROJECT_END) : PROJECT_END, owner: currentUser?.username || '' } }); } 
+    else { const node = targetNode || activeNode; setModal({ isOpen: true, mode: 'edit', data: { ...node, parentId: node.parentId || '', tagsString: node.tags?.join(', ') || '', metrics: node.metrics ? [...node.metrics] : [] } }); }
+  };
+  const handleSaveModal = () => {
+    const { name, level, parentId, owner, group, channel, product, tagsString, start, end, id, metrics } = modal.data;
+    if (!name) {
+      showToast('error', '策略名称不能为空');
+      return;
+    }
+    if (level !== 1 && !parentId) {
+      showToast('error', 'L2/L3 策略必须选择父节点');
+      return;
+    }
+    const tagsArray = tagsString ? tagsString.split(/[，,;；]/).map(t => t.trim()).filter(Boolean) : [];
+    const cleanMetrics = (metrics || []).filter(m => m.label && m.value);
+    if (modal.mode === 'create') {
+      const newNode: StrategyNode = { id: generateId(`L${level}`), level: level as Level, name: name!, parentId: parentId || null, owner: owner || currentUser?.username || '待定', group: group || '', channel: channel || '', product: product || '', tags: tagsArray, start: start || TODAY_STR, end: end || PROJECT_END, metrics: cleanMetrics, status: 'active' };
+      setStrategies(prev => [...prev, newNode]); setActiveNodeId(newNode.id); addLog('CREATE', 'STRATEGY', newNode.name, `Created Level ${level} strategy`);
+    } else {
+      if (!id) return;
+      setStrategies(prev => prev.map(s => s.id === id ? { ...s, name: name!, parentId: parentId || null, owner: owner || '', group: group || '', channel: channel || '', product: product || '', tags: tagsArray, metrics: cleanMetrics, start: start!, end: end! } : s)); addLog('UPDATE', 'STRATEGY', name!, 'Updated strategy details');
+    }
+    setModal({ ...modal, isOpen: false });
+  };
+  const safeConfirm = (title: string, message: string, action: () => void) => { setConfirmState({ isOpen: true, title, message, onConfirm: action }); };
+  const deleteActiveStrategy = () => {
+    if (activeNode.level === 1 && strategies.filter(s => s.level === 1).length <= 1) {
+      showToast('error', '至少保留一个 L1 顶级策略');
+      return;
+    }
+    safeConfirm("删除策略节点", `确定要删除策略 "${activeNode.name}" 及其所有子策略和任务吗？`, () => {
+      const nodeName = activeNode.name; const idsToDelete = getDescendantIds(activeNodeId);
+      setTasks(prev => prev.filter(t => !idsToDelete.includes(t.parentId))); setStrategies(strategies.filter(s => !idsToDelete.includes(s.id))); setConfirmState(prev => ({...prev, isOpen: false})); addLog('DELETE', 'STRATEGY', nodeName, `Deleted strategy and ${idsToDelete.length} descendants`);
+      if (strategies.length > 0) setActiveNodeId(strategies[0].id); else window.location.reload(); 
+    });
+  };
+  const addTask = () => {
+    let root = activeNode; while (root.parentId) { const p = strategies.find(s => s.id === root.parentId); if (p) root = p; else break; }
+    const newTask: Task = { id: generateId('t'), parentId: activeNodeId, rootId: root.id, text: '新任务', start: TODAY_STR, end: TODAY_STR, status: 'todo', progress: 0, owner: currentUser?.username || '', product: '', channel: '', priority: 'P2', notes: '', reports: [] };
+    setTasks(prev => [...prev, newTask]); addLog('CREATE', 'TASK', '新任务', `Added task to ${activeNode.name}`);
+  };
+  // 处理数据导入
+  const handleImportData = (importedStrategies: StrategyNode[], importedTasks: Task[]) => {
+    // 直接替换为导入的数据（importService 已经处理了合并策略）
+    setStrategies(importedStrategies);
+    setTasks(importedTasks);
+
+    // 保存到 localStorage
+    saveBatch([
+      { key: STORAGE_KEYS.STRATEGY, data: importedStrategies },
+      { key: STORAGE_KEYS.TASKS, data: importedTasks },
+    ]);
+
+    // 记录审计日志
+    addLog('CREATE', 'SYSTEM', 'Data Import', `导入了 ${importedStrategies.length} 个策略和 ${importedTasks.length} 个任务`);
+
+    showToast('success', `导入成功！策略: ${importedStrategies.length} 个，任务: ${importedTasks.length} 个`);
+  };
+
+  const updateTask = (id: string, updates: Partial<Task>) => {
+    setTasks(prev => {
+      const task = prev.find(t => t.id === id);
+      if (!task) {
+        console.warn(`Task with id ${id} not found`);
+        return prev;
+      }
+      
+      // 处理状态变化
+      const statusChanged = updates.status !== undefined && updates.status !== task.status;
+      if (statusChanged) {
+        addLog('UPDATE', 'TASK', task.text, `Status changed: ${task.status} -> ${updates.status}`);
+        if (updates.progress === undefined) {
+          if (updates.status === 'todo') updates.progress = 0;
+          else if (updates.status === 'in_progress' && task.progress === 0) updates.progress = 10;
+          else if (updates.status === 'completed' || updates.status === 'confirmed') updates.progress = 100;
+        }
+      }
+      
+      // 合并更新：使用原有任务作为基础，只更新提供的字段
+      // 过滤掉 undefined 值，避免覆盖原有字段
+      const cleanUpdates: Partial<Task> = {};
+      Object.keys(updates).forEach(key => {
+        const value = (updates as any)[key];
+        if (value !== undefined) {
+          (cleanUpdates as any)[key] = value;
+        }
+      });
+      
+      // 构建更新后的任务，确保 reports 数组被正确保存
+      const updatedTask: Task = {
+        ...task,
+        ...cleanUpdates,
+        // 确保 reports 数组始终存在且被正确保存
+        reports: cleanUpdates.reports !== undefined ? (cleanUpdates.reports || []) : (task.reports || [])
+      };
+      
+      // 确保所有必需字段都存在
+      const finalTask: Task = {
+        id: updatedTask.id || task.id,
+        parentId: updatedTask.parentId || task.parentId,
+        rootId: updatedTask.rootId || task.rootId,
+        text: updatedTask.text || task.text,
+        start: updatedTask.start || task.start,
+        end: updatedTask.end || task.end,
+        status: updatedTask.status || task.status,
+        progress: updatedTask.progress !== undefined ? updatedTask.progress : task.progress,
+        owner: updatedTask.owner || task.owner || '',
+        product: updatedTask.product || task.product || '',
+        channel: updatedTask.channel || task.channel || '',
+        priority: updatedTask.priority || task.priority || 'P2',
+        notes: updatedTask.notes || task.notes || '',
+        reports: updatedTask.reports || [],
+        reviewer: updatedTask.reviewer,
+        score: updatedTask.score,
+        reviewComment: updatedTask.reviewComment
+      };
+      
+      const newTasks = prev.map(t => t.id === id ? finalTask : t);
+      
+      // 立即保存到 localStorage
+      const saveResult = saveToStorage(STORAGE_KEYS.TASKS, newTasks, taskValidator);
+      if (!saveResult.success) {
+        console.error('立即保存任务失败:', saveResult.error);
+        setStorageError(`保存任务失败: ${saveResult.error}`);
+        setTimeout(() => setStorageError(null), 3000);
+      }
+      
+      return newTasks;
+    });
+  };
+  const deleteTask = (e: React.MouseEvent, id: string) => { e.stopPropagation(); const task = tasks.find(t => t.id === id); safeConfirm("删除执行任务", "确认删除此任务？该操作无法撤销。", () => { if (task) addLog('DELETE', 'TASK', task.text, 'Deleted task'); setTasks(prev => prev.filter(t => t.id !== id)); setConfirmState(prev => ({...prev, isOpen: false})); }); };
+  const openTaskEdit = (e: React.MouseEvent, task: Task) => { e.stopPropagation(); setTaskModal({ isOpen: true, data: { ...task, reports: task.reports || [] } }); };
+  const saveTaskFromModal = () => { 
+    if (!taskModal.data) return; 
+    
+    // 确保所有字段都被正确传递，特别是 reports
+    const taskData: Partial<Task> = {
+      ...taskModal.data,
+      reports: taskModal.data.reports || []
+    };
+    
+    updateTask(taskModal.data.id, taskData); 
+    addLog('UPDATE', 'TASK', taskModal.data.text, 'Updated task details from modal'); 
+    setTaskModal({ isOpen: false, data: null }); 
+  };
+  const addReportToTask = () => { if (!taskModal.data) return; const newReport: TaskReport = { id: generateId('rpt'), type: '进展', content: '', timestamp: TODAY_STR }; setTaskModal(prev => ({ ...prev, data: prev.data ? { ...prev.data, reports: [newReport, ...(prev.data.reports || [])] } : null })); };
+  const updateTaskReport = (rptId: string, field: keyof TaskReport, value: any) => { setTaskModal(prev => ({ ...prev, data: prev.data ? { ...prev.data, reports: (prev.data.reports || []).map(r => r.id === rptId ? { ...r, [field]: value } : r) } : null })); };
+  const deleteTaskReport = (rptId: string) => { setTaskModal(prev => ({ ...prev, data: prev.data ? { ...prev.data, reports: (prev.data.reports || []).filter(r => r.id !== rptId) } : null })); };
+  const handleAiAssist = async () => {
+    if (activeNode.level !== 3) {
+      showToast('error', 'AI 仅支持针对 L3 策略层级生成具体执行任务');
+      return;
+    }
+    setIsAiLoading(true); const parent = strategies.find(s => s.id === activeNode.parentId); const suggestions = await suggestL4Tasks(activeNode.name, parent?.name || "");
+    if (suggestions) { const newTasks: Task[] = suggestions.map((s: any) => ({ id: generateId('ai'), parentId: activeNode.id, rootId: 'L1-1', text: s.title, notes: s.description, start: activeNode.start, end: activeNode.end, status: 'todo', progress: 0, owner: 'AI', product: '', channel: '', priority: 'P2', reports: [] })); setTasks(prev => [...prev, ...newTasks]); addLog('CREATE', 'TASK', 'AI Generation', `AI generated ${newTasks.length} tasks`); }
+    setIsAiLoading(false);
+  };
+  const openReportModal = async () => { setReportModal({ isOpen: true, items: [], isGenerating: true }); const generatedItems = await generateWeeklyReport(activeNode.name, activeTasks, stats); const itemsWithId = generatedItems.map(item => ({...item, id: generateId('rpt')})); setReportModal({ isOpen: true, items: itemsWithId, isGenerating: false }); addLog('REPORT', 'SYSTEM', activeNode.name, 'Generated AI Weekly Report'); };
+  const addReportItem = () => { setReportModal(prev => ({ ...prev, items: [...prev.items, { id: generateId('rpt'), type: '进展', content: '' }] })); };
+  const deleteReportItem = (id: string) => { setReportModal(prev => ({ ...prev, items: prev.items.filter(i => i.id !== id) })); };
+  const updateReportItem = (id: string, field: keyof ReportItem, value: string) => { setReportModal(prev => ({ ...prev, items: prev.items.map(i => i.id === id ? { ...i, [field]: value } : i) })); };
+  const copyReportToClipboard = () => { const groups: Record<string, string[]> = {}; const order: ReportTag[] = ['进展', '结果', '问题', '计划', '复盘']; reportModal.items.forEach(item => { if (!groups[item.type]) groups[item.type] = []; groups[item.type].push(item.content); }); let text = `【${activeNode.name}】周工作汇报\n整体进度: ${stats.rate}%\n----------------\n`; order.forEach(tag => { if (groups[tag] && groups[tag].length > 0) { text += `\n### 【${tag}】\n`; groups[tag].forEach((content, idx) => { text += `${idx + 1}. ${content}\n`; }); } }); navigator.clipboard.writeText(text).then(() => { alert("汇报内容已复制到剪贴板"); }); };
+  const toggleNode = (e: React.MouseEvent, nodeId: string) => { e.stopPropagation(); const newSet = new Set(expandedNodes); if (newSet.has(nodeId)) newSet.delete(nodeId); else newSet.add(nodeId); setExpandedNodes(newSet); };
+
+  // --- Render Functions ---
+  // 注意：所有 render 函数已被组件替代
+  const potentialParents = useMemo(() => { if (!modal.data.level || modal.data.level === 1) return []; return strategies.filter(s => s.level === (modal.data.level! - 1)); }, [strategies, modal.data.level]);
+  const isFilterActive = filters.owner !== 'all' || filters.channel !== 'all' || filters.product !== 'all' || filters.tag !== 'all' || (filters.time !== 'all' && !(filters.time === 'custom' && !filters.customStartDate && !filters.customEndDate));
+
+  if (!currentUser) {
+      return (
+      <AuthContainer
+        mode={authMode}
+        // Login props
+        loginUsername={loginUsername}
+        loginPassword={loginPassword}
+        loginError={loginError}
+        onLoginUsernameChange={setLoginUsername}
+        onLoginPasswordChange={setLoginPassword}
+        onLogin={handleLogin}
+        // Register props
+        registerUsername={registerData.username}
+        registerPassword={registerData.password}
+        registerConfirmPassword={registerData.confirmPassword}
+        registerError={loginError}
+        onRegisterUsernameChange={(value) => setRegisterData(prev => ({ ...prev, username: value }))}
+        onRegisterPasswordChange={(value) => setRegisterData(prev => ({ ...prev, password: value }))}
+        onRegisterConfirmPasswordChange={(value) => setRegisterData(prev => ({ ...prev, confirmPassword: value }))}
+        onRegister={handleRegister}
+        // Forgot password props
+        forgotUsername={registerData.username}
+        forgotPassword={registerData.password}
+        forgotConfirmPassword={registerData.confirmPassword}
+        forgotError={loginError}
+        onForgotUsernameChange={(value) => setRegisterData(prev => ({ ...prev, username: value }))}
+        onForgotPasswordChange={(value) => setRegisterData(prev => ({ ...prev, password: value }))}
+        onForgotConfirmPasswordChange={(value) => setRegisterData(prev => ({ ...prev, confirmPassword: value }))}
+        onForgotPassword={handleResetPassword}
+        // Mode switching
+        onModeChange={(mode) => setAuthMode(mode)}
+        onErrorClear={() => setLoginError('')}
+      />
+      );
+  }
+
+  return (
+    <div className="flex h-screen bg-[#F7F6F3] font-sans text-[#37352F] overflow-hidden w-full max-w-full">
+      {/* 存储错误提示 */}
+      {storageError && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 max-w-md w-full mx-4">
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 shadow-lg flex items-start gap-3">
+            <div className="w-5 h-5 bg-rose-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              </div>
+            <div className="flex-1">
+              <div className="text-sm font-bold text-rose-900 mb-1">数据存储错误</div>
+              <div className="text-xs text-rose-700">{storageError}</div>
+          </div>
+            <button
+              onClick={() => setStorageError(null)}
+              className="text-rose-400 hover:text-rose-600 transition-colors"
+              aria-label="关闭"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+              </div>
+              </div>
+      )}
+      
+      <Sidebar
+        currentUser={currentUser}
+        strategies={strategies}
+        tasks={tasks}
+        expandedNodes={expandedNodes}
+        activeNodeId={activeNodeId}
+        activeNode={activeNode}
+        onNodeClick={setActiveNodeId}
+        onNodeEdit={(e, node) => {
+          e.stopPropagation();
+          setActiveNodeId(node.id);
+          openStrategyModal('edit', undefined, undefined, node);
+        }}
+        onTaskClick={openTaskEdit}
+        onToggleExpand={toggleNode}
+        onUserManagementClick={() => setIsUserMgmtOpen(true)}
+        onAuditLogClick={() => setIsLogModalOpen(true)}
+        onLogoutClick={handleLogout}
+        onMapModalOpen={() => setIsMapModalOpen(true)}
+        onReportModalOpen={openReportModal}
+        onAddSubStrategy={(level, parentId) => openStrategyModal('create', level, parentId)}
+        onAddTopStrategy={() => openStrategyModal('create', 1, null)}
+        onImportData={() => setIsImportModalOpen(true)}
+        onExportCSV={() => exportToCSV(activeTasks, strategies, filteredStrategies, showToast)}
+        onDeleteStrategy={deleteActiveStrategy}
+      />
+
+      <main className="flex-1 flex flex-col min-w-0 bg-[#F7F6F3]">
+        <Header
+          activeNode={activeNode}
+          stats={stats}
+          onNodeEdit={() => openStrategyModal('edit')}
+          onReportModalOpen={openReportModal}
+          onQuickAction={(action) => {
+            if (action === 'add-strategy') {
+              openStrategyModal('create', 1, null);
+            } else if (action === 'add-sub-strategy') {
+              openStrategyModal('create', (activeNode.level + 1) as Level, activeNode.id);
+            } else if (action === 'add-task') {
+              addTask();
+            }
+          }}
+        />
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 sm:p-8 space-y-6 sm:space-y-8 min-w-0">
+          <FilterPanel
+            isCollapsed={isFilterCollapsed}
+            isFilterActive={isFilterActive}
+            filters={filters}
+            filterOptions={filterOptions}
+            filteredStrategies={filteredStrategies}
+            onToggleCollapse={() => setIsFilterCollapsed(!isFilterCollapsed)}
+            onFilterChange={setFilters}
+            onClearFilters={() =>
+              setFilters({
+                owner: 'all',
+                channel: 'all',
+                product: 'all',
+                tag: 'all',
+                time: 'all',
+                customStartDate: undefined,
+                customEndDate: undefined,
+              })
+            }
+            onStrategyClick={setActiveNodeId}
+          />
+
+          <GanttChart
+            isCollapsed={isGanttCollapsed}
+            height={ganttHeight}
+            scale={ganttScale}
+            tasks={activeTasks}
+            strategies={filteredStrategies}
+            activeBranchIds={activeBranchIds}
+            onToggleCollapse={handleGanttToggle}
+            onScaleChange={delta => setGanttScale(prev => Math.max(2, Math.min(20, prev + delta)))}
+            onHeightResize={(e, currentHeight) => startResize(e, setGanttHeight, currentHeight)}
+          />
+
+          <TaskList
+            isCollapsed={isListCollapsed}
+            height={listHeight}
+            tasks={activeTasks}
+            isFilterActive={isFilterActive}
+            isAiLoading={isAiLoading}
+            canUseAI={activeNode.level === 3}
+            onToggleCollapse={() => setIsListCollapsed(!isListCollapsed)}
+            onHeightResize={(e, currentHeight) => startResize(e, setListHeight, currentHeight)}
+            onTaskUpdate={updateTask}
+            onTaskEdit={openTaskEdit}
+            onTaskDelete={deleteTask}
+            onAddTask={addTask}
+            onAiAssist={handleAiAssist}
+          />
+          <footer className="text-center text-[9px] text-slate-300 font-medium py-4">FOTOPRO AXIS STRATEGIC SYSTEM v2.4 · BUILD {TODAY_STR.replace(/-/g, '')}</footer>
+        </div>
+      </main>
+      
+      <MapModal
+        isOpen={isMapModalOpen}
+        strategies={strategies}
+        tasks={tasks}
+        expandedNodes={expandedNodes}
+        activeNodeId={activeNodeId}
+        onClose={() => setIsMapModalOpen(false)}
+        onNodeClick={setActiveNodeId}
+        onTaskClick={(e, task) => {
+          setIsMapModalOpen(false);
+          openTaskEdit(e, task);
+        }}
+        onToggleExpand={toggleNode}
+      />
+
+      <UserManagementModal
+        isOpen={isUserMgmtOpen}
+        currentUser={currentUser}
+        users={users}
+        newUser={newUser}
+        onClose={() => setIsUserMgmtOpen(false)}
+        onNewUserChange={(field, value) =>
+          setNewUser({ ...newUser, [field]: value })
+        }
+        onAddUser={handleAddUser}
+        onDeleteUser={handleDeleteUser}
+      />
+
+      <AuditLogModal
+        isOpen={isLogModalOpen}
+        auditLogs={auditLogs}
+        onClose={() => setIsLogModalOpen(false)}
+      />
+
+      <StrategyModal
+        isOpen={modal.isOpen}
+        mode={modal.mode}
+        data={modal.data}
+        potentialParents={potentialParents}
+        allUsedTags={allUsedTags}
+        onClose={() => setModal({ ...modal, isOpen: false })}
+        onSave={handleSaveModal}
+        onDataChange={data => setModal({ ...modal, data })}
+        onAddMetric={addMetric}
+        onUpdateMetric={updateMetric}
+        onRemoveMetric={removeMetric}
+      />
+
+      <TaskModal
+        isOpen={taskModal.isOpen}
+        task={taskModal.data}
+        onClose={() => setTaskModal({ ...taskModal, isOpen: false, data: null })}
+        onSave={saveTaskFromModal}
+        onTaskChange={updates =>
+          setTaskModal({
+            ...taskModal,
+            data: taskModal.data ? { ...taskModal.data, ...updates } : null,
+          })
+        }
+        onAddReport={addReportToTask}
+        onUpdateReport={updateTaskReport}
+        onDeleteReport={deleteTaskReport}
+      />
+
+      <ImportModal
+        isOpen={isImportModalOpen}
+        existingStrategies={strategies}
+        existingTasks={tasks}
+        onClose={() => setIsImportModalOpen(false)}
+        onImport={handleImportData}
+      />
+
+      <ReportModal
+        isOpen={reportModal.isOpen}
+        isGenerating={reportModal.isGenerating}
+        items={reportModal.items}
+        activeTasksCount={activeTasks.length}
+        completionRate={stats.rate}
+        completedCount={stats.completed}
+        onClose={() => setReportModal({ ...reportModal, isOpen: false })}
+        onAddItem={addReportItem}
+        onUpdateItem={updateReportItem}
+        onDeleteItem={deleteReportItem}
+        onCopyToClipboard={copyReportToClipboard}
+      />
+
+      <ToastContainer toasts={toasts} onClose={removeToast} />
+
+      {confirmState.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[10000] flex items-center justify-center p-4 animate-in fade-in duration-200">
+           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm transform transition-all scale-100 opacity-100">
+              <div className="flex flex-col items-center text-center gap-4">
+                 <div className="w-12 h-12 bg-rose-100 text-rose-500 rounded-full flex items-center justify-center"><Icon name="trash" size={24} /></div>
+                 <div><h3 className="text-lg font-black text-slate-900">{confirmState.title || '确认操作'}</h3><p className="text-xs text-slate-500 mt-1 font-medium leading-relaxed">{confirmState.message}</p></div>
+                 <div className="flex gap-3 w-full mt-2"><button type="button" onClick={() => setConfirmState({...confirmState, isOpen: false})} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl text-xs font-black uppercase hover:bg-slate-200 transition-all">取消</button><button type="button" onClick={confirmState.onConfirm} className="flex-1 py-3 bg-rose-500 text-white rounded-xl text-xs font-black uppercase shadow-lg shadow-rose-200 hover:bg-rose-600 active:scale-95 transition-all">确认删除</button></div>
+              </div>
+           </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default App;
