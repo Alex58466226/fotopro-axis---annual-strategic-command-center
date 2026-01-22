@@ -271,7 +271,7 @@ export const MapModal: React.FC<MapModalProps> = ({
             }}
             {...(canDrag ? { ...attributes, ...listeners } : {})}
           >
-            {/* 标题作为第一行，标签和可拖拽标识在同一行 */}
+            {/* 标题作为第一行，可拖拽标识在右侧 */}
             <div className="flex items-start justify-between gap-2 mb-1.5">
               <h4 className={`${currentSize.titleSize} font-black text-slate-800 flex-1 leading-tight`}>{node.name}</h4>
               {/* 可拖拽标识移到右上角 */}
@@ -281,41 +281,64 @@ export const MapModal: React.FC<MapModalProps> = ({
                 </div>
               )}
             </div>
-            {/* 标签移到标题下方，更核心的位置 */}
-            {(node.group || (node.tags && node.tags.length > 0)) && (
-              <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
-                {/* 层级标签：悬停时显示，完全次要信息 */}
-                <span
-                  className={`text-[7px] font-normal text-slate-300 opacity-0 group-hover:opacity-40 transition-opacity duration-200 ${
-                    node.level === 1
-                      ? 'text-slate-300'
-                      : node.level === 2
-                      ? 'text-indigo-200'
-                      : 'text-orange-200'
-                  }`}
-                >
-                  L{node.level}
+            {/* 第二行：显示摘要信息、标签等 */}
+            <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+              {/* 层级标签：悬停时显示，完全次要信息 */}
+              <span
+                className={`text-[7px] font-normal text-slate-300 opacity-0 group-hover:opacity-40 transition-opacity duration-200 ${
+                  node.level === 1
+                    ? 'text-slate-300'
+                    : node.level === 2
+                    ? 'text-indigo-200'
+                    : 'text-orange-200'
+                }`}
+              >
+                L{node.level}
+              </span>
+              {/* Group 标识 */}
+              {node.group && (
+                <span className="text-[9px] font-bold uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                  {node.group}
                 </span>
-                {node.group && (
-                  <span className="text-[9px] font-bold uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-                    {node.group}
-                  </span>
-                )}
-                {/* 标签移到更核心位置 */}
-                {node.tags && node.tags.length > 0 && (
-                  <div className="flex gap-1.5 flex-wrap">
-                    {node.tags.map(t => (
-                      <span
-                        key={t}
-                        className="text-[9px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md"
-                      >
-                        #{t}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+              {/* 标签 */}
+              {node.tags && node.tags.length > 0 && (
+                <>
+                  {node.tags.slice(0, 3).map(t => (
+                    <span
+                      key={t}
+                      className="text-[9px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md"
+                    >
+                      #{t}
+                    </span>
+                  ))}
+                  {node.tags.length > 3 && (
+                    <span className="text-[9px] font-medium text-slate-500 px-1.5">
+                      +{node.tags.length - 3}
+                    </span>
+                  )}
+                </>
+              )}
+              {/* 负责人 */}
+              {node.owner && (
+                <span className="text-[9px] font-medium text-slate-500 flex items-center gap-1">
+                  <Icon name="user" size={10} />
+                  {node.owner}
+                </span>
+              )}
+              {/* 渠道 */}
+              {node.channel && (
+                <span className="text-[9px] font-medium text-slate-500 px-1.5 py-0.5 bg-slate-50 rounded">
+                  {node.channel}
+                </span>
+              )}
+              {/* 产品 */}
+              {node.product && (
+                <span className="text-[9px] font-medium text-slate-500 px-1.5 py-0.5 bg-slate-50 rounded">
+                  {node.product}
+                </span>
+              )}
+            </div>
             <div className={`flex items-center ${currentSize.gap} text-[10px] text-slate-500 font-medium pt-1.5 border-t border-slate-50`}>
               <span className="flex items-center gap-1">
                 <Icon name="user" size={12} /> {node.owner || 'Unassigned'}
