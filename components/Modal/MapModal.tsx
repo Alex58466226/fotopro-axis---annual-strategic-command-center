@@ -254,7 +254,7 @@ export const MapModal: React.FC<MapModalProps> = ({
             <div className="absolute -left-[3px] top-[22px] w-1.5 h-1.5 bg-slate-300 rounded-full" />
           )}
           <div
-            className={`${currentSize.padding} bg-white border rounded-2xl transition-all shadow-sm hover:shadow-md ${
+            className={`${currentSize.padding} bg-white border rounded-2xl transition-all shadow-sm hover:shadow-md group ${
               activeNodeId === node.id
                 ? 'border-slate-900 ring-2 ring-slate-100'
                 : 'border-slate-200 hover:border-indigo-300'
