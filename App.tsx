@@ -999,7 +999,10 @@ const App: React.FC = () => {
     } else {
       if (!id) return;
       setStrategies(prev => prev.map(s => s.id === id ? { ...s, name: name!, parentId: parentId || null, owner: owner || '', group: group || '', channel: channel || '', product: product || '', tags: tagsArray, metrics: cleanMetrics, start: start!, end: end! } : s)); addLog('UPDATE', 'STRATEGY', name!, 'Updated strategy details');
-  
+    }
+    setModal({ ...modal, isOpen: false });
+  };
+
   // 更新策略（用于拖拽等操作）
   const updateStrategy = (id: string, updates: Partial<StrategyNode>) => {
     setStrategies(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
@@ -1007,9 +1010,6 @@ const App: React.FC = () => {
     if (strategy) {
       addLog('UPDATE', 'STRATEGY', strategy.name, `Updated strategy: ${Object.keys(updates).join(', ')}`);
     }
-  };
-    }
-    setModal({ ...modal, isOpen: false });
   };
   const safeConfirm = (title: string, message: string, action: () => void) => { setConfirmState({ isOpen: true, title, message, onConfirm: action }); };
   const deleteActiveStrategy = () => {
@@ -1438,6 +1438,16 @@ const App: React.FC = () => {
           openTaskEdit(e, task);
         }}
         onToggleExpand={toggleNode}
+        onStrategyUpdate={updateStrategy}
+        onDragSuccess={(draggedName, targetName, newParentName) => {
+          if (draggedName && targetName) {
+            if (newParentName) {
+              showToast('success', `"${draggedName}" 已移动到 "${newParentName}" 下`);
+            } else {
+              showToast('success', `"${draggedName}" 已移动到 "${targetName}" 的兄弟节点`);
+            }
+          }
+        }}
       />
 
       <UserManagementModal

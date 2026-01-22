@@ -35,6 +35,7 @@ interface MapModalProps {
   onTaskClick: (e: React.MouseEvent, task: Task) => void;
   onToggleExpand: (e: React.MouseEvent, nodeId: string) => void;
   onStrategyUpdate?: (id: string, updates: Partial<StrategyNode>) => void; // 新增：策略更新回调（用于拖拽）
+  onDragSuccess?: (draggedName: string, targetName: string, newParentName?: string) => void; // 新增：拖拽成功回调
 }
 
 /**
@@ -51,6 +52,7 @@ export const MapModal: React.FC<MapModalProps> = ({
   onTaskClick,
   onToggleExpand,
   onStrategyUpdate,
+  onDragSuccess,
 }) => {
   if (!isOpen) return null;
 
@@ -114,7 +116,12 @@ export const MapModal: React.FC<MapModalProps> = ({
     if (!draggedStrategy) return;
 
     // 只允许拖拽 L2-L3 策略节点
-    if (draggedStrategy.level < 2 || draggedStrategy.level > 3) return;
+    if (draggedStrategy.level < 2 || draggedStrategy.level > 3) {
+      if (onDragSuccess) {
+        onDragSuccess('', '', ''); // 触发错误提示
+      }
+      return;
+    }
 
     // 不能拖拽到自己
     if (active.id === over.id) return;
@@ -125,23 +132,43 @@ export const MapModal: React.FC<MapModalProps> = ({
       if (children.some(c => c.id === childId)) return true;
       return children.some(c => isDescendant(c.id, childId));
     };
-    if (isDescendant(draggedStrategy.id, over.id as string)) return;
+    if (isDescendant(draggedStrategy.id, over.id as string)) {
+      if (onDragSuccess) {
+        onDragSuccess('', '', ''); // 触发错误提示
+      }
+      return;
+    }
 
     // 确定新的 parentId
     let newParentId: string | null = null;
+    let relationship = '';
     if (targetStrategy) {
       // 如果拖拽到策略节点上，根据目标节点的层级决定
       if (targetStrategy.level < draggedStrategy.level) {
         // 可以成为目标节点的子节点
         newParentId = targetStrategy.id;
+        relationship = '子节点';
       } else if (targetStrategy.parentId) {
         // 成为目标节点的兄弟节点
         newParentId = targetStrategy.parentId;
+        relationship = '兄弟节点';
       }
     }
 
     if (newParentId !== null && newParentId !== draggedStrategy.parentId) {
+      const oldParent = strategies.find(s => s.id === draggedStrategy.parentId);
+      const newParent = strategies.find(s => s.id === newParentId);
+      
       onStrategyUpdate(draggedStrategy.id, { parentId: newParentId });
+      
+      // 显示成功提示
+      if (onDragSuccess) {
+        onDragSuccess(
+          draggedStrategy.name,
+          targetStrategy?.name || '',
+          newParent?.name
+        );
+      }
     }
   };
 
@@ -189,7 +216,7 @@ export const MapModal: React.FC<MapModalProps> = ({
               activeNodeId === node.id
                 ? 'border-slate-900 ring-2 ring-slate-100'
                 : 'border-slate-200 hover:border-indigo-300'
-            } $            ${canDrag ? 'cursor-move' : 'cursor-pointer'}`}
+            } ${canDrag ? 'cursor-move hover:border-indigo-500 hover:ring-2 hover:ring-indigo-200' : 'cursor-pointer'}`}
             onClick={() => onNodeClick(node.id)}
             {...(canDrag ? { ...attributes, ...listeners } : {})}
           >
@@ -269,11 +296,56 @@ export const MapModal: React.FC<MapModalProps> = ({
       id: node.id,
     });
 
+    // 检查当前拖拽的节点是否可以放置到这里
+    const canDrop = React.useMemo(() => {
+      if (!activeId) return false;
+      const draggedStrategy = strategies.find(s => s.id === activeId);
+      if (!draggedStrategy) return false;
+      
+      // 只允许拖拽 L2-L3
+      if (draggedStrategy.level < 2 || draggedStrategy.level > 3) return false;
+      
+      // 不能拖拽到自己
+      if (activeId === node.id) return false;
+      
+      // 不能拖拽到自己的子节点
+      const isDescendant = (parentId: string, childId: string): boolean => {
+        const children = strategies.filter(s => s.parentId === parentId);
+        if (children.some(c => c.id === childId)) return true;
+        return children.some(c => isDescendant(c.id, childId));
+      };
+      if (isDescendant(activeId, node.id)) return false;
+      
+      // 检查层级关系
+      if (draggedStrategy.level > node.level) {
+        // 可以成为目标节点的子节点
+        return true;
+      } else if (node.parentId) {
+        // 可以成为目标节点的兄弟节点
+        return true;
+      }
+      
+      return false;
+    }, [activeId, node, strategies]);
+
     return (
       <div
         ref={setNodeRef}
-        className={`${isOver ? 'ring-2 ring-indigo-500 bg-indigo-50/50 rounded-2xl p-2' : ''}`}
+        className={`transition-all duration-200 ${
+          isOver && canDrop
+            ? 'ring-4 ring-indigo-500 bg-indigo-100/80 rounded-2xl p-3 scale-105 shadow-lg'
+            : isOver
+            ? 'ring-2 ring-rose-400 bg-rose-50/50 rounded-2xl p-2'
+            : ''
+        }`}
       >
+        {isOver && canDrop && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
+            <div className="bg-indigo-500 text-white px-4 py-2 rounded-lg shadow-xl font-bold text-sm animate-pulse">
+              ✓ 放置到这里
+            </div>
+          </div>
+        )}
         {children}
       </div>
     );
@@ -322,13 +394,30 @@ export const MapModal: React.FC<MapModalProps> = ({
               {strategies.filter(s => s.level === 1).map(renderLargeMapNode)}
             </div>
             <DragOverlay>
-              {activeId ? (
-                <div className="p-4 bg-white border-2 border-indigo-500 rounded-2xl shadow-xl opacity-90">
-                  <div className="text-sm font-black text-slate-800">
-                    {strategies.find(s => s.id === activeId)?.name || ''}
+              {activeId ? (() => {
+                const draggedStrategy = strategies.find(s => s.id === activeId);
+                if (!draggedStrategy) return null;
+                return (
+                  <div className="p-4 bg-gradient-to-br from-indigo-500 to-indigo-600 border-4 border-white rounded-2xl shadow-2xl transform rotate-3 scale-110">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                        <Icon name="layers" size={20} className="text-white" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-white/80 uppercase tracking-wider">
+                          L{draggedStrategy.level} 策略
+                        </div>
+                        <div className="text-base font-black text-white">
+                          {draggedStrategy.name}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-xs text-white/90 font-medium">
+                      ← 拖拽到目标位置
+                    </div>
                   </div>
-                </div>
-              ) : null}
+                );
+              })() : null}
             </DragOverlay>
           </DndContext>
         </div>
