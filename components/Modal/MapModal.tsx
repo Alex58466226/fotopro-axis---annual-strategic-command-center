@@ -101,22 +101,41 @@ export const MapModal: React.FC<MapModalProps> = ({
   );
 
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
+    const draggedId = event.active.id as string;
+    setActiveId(draggedId);
+    const draggedStrategy = strategies.find(s => s.id === draggedId);
+    console.log('🚀 拖拽开始:', draggedStrategy?.name, 'Level:', draggedStrategy?.level);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
 
-    if (!over || !onStrategyUpdate) return;
+    console.log('🎯 拖拽结束:', { active: active.id, over: over?.id });
+
+    if (!over || !onStrategyUpdate) {
+      console.log('❌ 拖拽失败: 没有目标或更新函数');
+      return;
+    }
 
     const draggedStrategy = strategies.find(s => s.id === active.id);
     const targetStrategy = strategies.find(s => s.id === over.id);
 
-    if (!draggedStrategy) return;
+    if (!draggedStrategy) {
+      console.log('❌ 拖拽失败: 找不到被拖拽的策略');
+      return;
+    }
+
+    console.log('📋 拖拽信息:', {
+      dragged: draggedStrategy.name,
+      target: targetStrategy?.name,
+      draggedLevel: draggedStrategy.level,
+      targetLevel: targetStrategy?.level,
+    });
 
     // 只允许拖拽 L2-L3 策略节点
     if (draggedStrategy.level < 2 || draggedStrategy.level > 3) {
+      console.log('❌ 拖拽失败: 只允许拖拽 L2-L3 节点');
       if (onDragSuccess) {
         onDragSuccess('', '', ''); // 触发错误提示
       }
@@ -159,6 +178,12 @@ export const MapModal: React.FC<MapModalProps> = ({
       const oldParent = strategies.find(s => s.id === draggedStrategy.parentId);
       const newParent = strategies.find(s => s.id === newParentId);
       
+      console.log('✅ 拖拽成功:', {
+        from: oldParent?.name || '根节点',
+        to: newParent?.name || '根节点',
+        relationship,
+      });
+      
       onStrategyUpdate(draggedStrategy.id, { parentId: newParentId });
       
       // 显示成功提示
@@ -169,14 +194,18 @@ export const MapModal: React.FC<MapModalProps> = ({
           newParent?.name
         );
       }
+    } else {
+      console.log('⚠️ 拖拽取消: 没有有效的目标位置或位置未改变');
     }
   };
 
   // 可拖拽的策略节点组件
   const DraggableStrategyNode: React.FC<{ node: StrategyNode }> = ({ node }) => {
+    const canDrag = node.level >= 2 && node.level <= 3;
+    
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
       id: node.id,
-      disabled: node.level < 2 || node.level > 3, // 只允许拖拽 L2-L3
+      disabled: !canDrag, // 只允许拖拽 L2-L3
     });
 
     const style = transform
@@ -189,7 +218,6 @@ export const MapModal: React.FC<MapModalProps> = ({
     const childTasks = tasks.filter(t => t.parentId === node.id);
     const hasChildren = childStrategies.length > 0 || childTasks.length > 0;
     const isExpanded = expandedNodes.has(node.id);
-    const canDrag = node.level >= 2 && node.level <= 3;
 
     return (
       <div
@@ -217,12 +245,21 @@ export const MapModal: React.FC<MapModalProps> = ({
                 ? 'border-slate-900 ring-2 ring-slate-100'
                 : 'border-slate-200 hover:border-indigo-300'
             } ${canDrag ? 'cursor-move hover:border-indigo-500 hover:ring-2 hover:ring-indigo-200' : 'cursor-pointer'}`}
-            onClick={() => onNodeClick(node.id)}
+            onClick={(e) => {
+              if (!canDrag) {
+                onNodeClick(node.id);
+              }
+            }}
+            onMouseDown={(e) => {
+              if (canDrag) {
+                console.log('🖱️ 鼠标按下，准备拖拽:', node.name, 'Level:', node.level);
+              }
+            }}
             {...(canDrag ? { ...attributes, ...listeners } : {})}
           >
             {canDrag && (
-              <div className="absolute top-2 right-2 text-[8px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded">
-                可拖拽
+              <div className="absolute top-2 right-2 text-[9px] text-indigo-600 bg-indigo-100 border border-indigo-300 px-2 py-1 rounded-md font-bold shadow-sm animate-pulse">
+                ✨ 可拖拽
               </div>
             )}
             <div className="flex justify-between items-start mb-2">
@@ -278,7 +315,9 @@ export const MapModal: React.FC<MapModalProps> = ({
         {isExpanded && hasChildren && (
           <div className="mt-2 ml-2">
             {childStrategies.map(child => (
-              <DraggableStrategyNode key={child.id} node={child} />
+              <DroppableArea key={child.id} node={child}>
+                <DraggableStrategyNode node={child} />
+              </DroppableArea>
             ))}
             {childTasks.map(renderLargeMapTask)}
           </div>
