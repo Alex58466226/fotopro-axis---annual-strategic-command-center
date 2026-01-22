@@ -2,6 +2,7 @@ import React from 'react';
 import Icon from '../Icon';
 import { Task, StrategyNode } from '../../types';
 import { PROJECT_START, PROJECT_END, TODAY_STR, getDayOffset } from '../../constants';
+import { getTaskVisualStyle, getTaskRisk, getPriorityIcon } from '../../utils/taskVisualHelpers';
 
 interface GanttItem {
   id: string;
@@ -275,14 +276,32 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                     const width = Math.max(20, getDayOffset(item.end, scale) - offset);
                     const indent = (item.level - 1) * 20; // 层级缩进
                     
+                    // 获取任务对象（如果是任务类型）
+                    const task = item.type === 'task' ? tasks.find(t => t.id === item.id) : null;
+                    
                     // 根据层级和类型设置颜色
                     let bgColor = 'bg-blue-50';
+                    let borderColor = '#E9E9E7';
+                    let borderWidth = 1;
+                    let borderStyle: 'solid' | 'dashed' = 'solid';
+                    let opacity = 1;
+                    
                     if (item.type === 'strategy') {
+                      // 策略节点
                       if (item.level === 1) bgColor = 'bg-indigo-100';
                       else if (item.level === 2) bgColor = 'bg-indigo-50';
                       else if (item.level === 3) bgColor = 'bg-blue-50';
+                      borderColor = '#BBDEFB';
+                    } else if (task) {
+                      // 任务类型：使用视觉编码
+                      const visualStyle = getTaskVisualStyle(task);
+                      bgColor = ''; // 使用内联样式
+                      borderColor = visualStyle.borderColor;
+                      borderWidth = visualStyle.borderWidth;
+                      borderStyle = visualStyle.borderStyle;
+                      opacity = visualStyle.opacity;
                     } else {
-                      // 任务类型
+                      // 任务类型但找不到任务对象（fallback）
                       if (item.status === 'completed' || item.status === 'confirmed') {
                         bgColor = 'bg-slate-300';
                       } else if (item.level === 4) {
@@ -291,6 +310,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                         bgColor = 'bg-amber-50';
                       }
                     }
+                    
+                    // 构建任务标题（包含优先级图标）
+                    const priorityIcon = task ? getPriorityIcon(task.priority) : '';
+                    const risk = task ? getTaskRisk(task) : null;
+                    const riskIcon = risk && risk.hasRisk ? '⚠' : '';
                     
                     return (
                       <div key={item.id} className="relative h-6 group">
@@ -305,6 +329,20 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                           }`}>
                             L{item.level}
                           </span>
+                          {priorityIcon && (
+                            <span className="text-[10px] flex-shrink-0" title={`优先级: ${task?.priority}`}>
+                              {priorityIcon}
+                            </span>
+                          )}
+                          {riskIcon && (
+                            <span 
+                              className="text-[10px] flex-shrink-0"
+                              style={{ color: risk?.level === 'high' ? '#EF4444' : '#F59E0B' }}
+                              title={`风险: ${risk?.reasons.join(', ')}`}
+                            >
+                              {riskIcon}
+                            </span>
+                          )}
                           <span className={`text-[11px] ${
                             item.type === 'strategy' ? 'text-[#37352F] font-medium' : 'text-[#787774]'
                           }`}>
@@ -312,11 +350,22 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                           </span>
                         </div>
                         <div
-                          className={`absolute h-4 rounded-md top-1 ${bgColor} hover:opacity-80 transition-all cursor-pointer border ${
-                            item.type === 'strategy' ? 'border-[#BBDEFB]' : 'border-[#E9E9E7]'
+                          className={`absolute h-4 rounded-md top-1 hover:opacity-80 transition-all cursor-pointer ${
+                            item.type === 'strategy' || !task ? bgColor : ''
                           }`}
-                          style={{ left: offset + 140 + indent, width }}
-                          title={`${item.text} (L${item.level}): ${item.start} ~ ${item.end}`}
+                          style={{
+                            left: offset + 140 + indent,
+                            width,
+                            backgroundColor: task ? undefined : bgColor,
+                            ...(task ? {
+                              backgroundColor: getTaskVisualStyle(task).backgroundColor,
+                              borderColor: borderColor,
+                              borderWidth: `${borderWidth}px`,
+                              borderStyle: borderStyle,
+                              opacity: opacity,
+                            } : {}),
+                          }}
+                          title={`${item.text} (L${item.level}): ${item.start} ~ ${item.end}${task && task.score !== undefined ? ` | 得分: ${task.score}` : ''}${risk && risk.hasRisk ? ` | 风险: ${risk.reasons.join(', ')}` : ''}`}
                         />
                       </div>
                     );

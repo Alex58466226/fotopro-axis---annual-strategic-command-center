@@ -4,6 +4,14 @@ import { CSS } from '@dnd-kit/utilities';
 import Icon from '../Icon';
 import { Task, TaskStatus } from '../../types';
 import { STATUS_CONFIG } from './TaskList';
+import {
+  getPriorityColor,
+  getPriorityIcon,
+  getScoreColor,
+  getScoreIcon,
+  getTaskRisk,
+  getRiskIcon,
+} from '../../utils/taskVisualHelpers';
 
 interface TaskItemProps {
   task: Task;
@@ -39,12 +47,26 @@ export const TaskItem: React.FC<TaskItemProps> = ({
   };
 
   const reportCount = task.reports?.length || 0;
+  const risk = getTaskRisk(task);
+  const scoreColor = getScoreColor(task.score);
+  const scoreIcon = getScoreIcon(task.score);
+  const riskIcon = getRiskIcon(risk);
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="grid grid-cols-[40px_80px_1fr_100px_120px_120px_60px_100px] gap-4 px-6 py-4 items-center hover:bg-[#F7F6F3] transition-colors group border-b border-[#E9E9E7]"
+      className={`grid grid-cols-[40px_80px_1fr_100px_120px_120px_60px_100px] gap-4 px-6 py-4 items-center hover:bg-[#F7F6F3] transition-colors group border-b ${
+        risk.hasRisk && risk.level === 'high'
+          ? 'border-l-4 border-l-red-500 bg-red-50/30'
+          : risk.hasRisk && risk.level === 'medium'
+          ? 'border-l-4 border-l-amber-500 bg-amber-50/20'
+          : scoreColor && task.score && task.score < 60
+          ? 'border-l-2 border-l-red-400'
+          : scoreColor && task.score && task.score >= 80
+          ? 'border-l-2 border-l-emerald-400'
+          : 'border-[#E9E9E7]'
+      }`}
     >
       {/* 拖拽手柄 */}
       <div
@@ -74,18 +96,44 @@ export const TaskItem: React.FC<TaskItemProps> = ({
       </div>
 
       {/* Task Content */}
-      <div className="flex flex-col">
-        <input
-          value={task.text}
-          onChange={e => onTaskUpdate(task.id, { text: e.target.value })}
-          onClick={(e) => e.stopPropagation()}
-          className={`bg-transparent border-none outline-none text-sm font-bold w-full ${
-            task.status === 'completed' || task.status === 'confirmed'
-              ? 'text-[#9B9A97] line-through'
-              : 'text-[#37352F]'
-          }`}
-          placeholder="输入任务内容..."
-        />
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <input
+            value={task.text}
+            onChange={e => onTaskUpdate(task.id, { text: e.target.value })}
+            onClick={(e) => e.stopPropagation()}
+            className={`bg-transparent border-none outline-none text-sm font-bold flex-1 ${
+              task.status === 'completed' || task.status === 'confirmed'
+                ? 'text-[#9B9A97] line-through'
+                : 'text-[#37352F]'
+            }`}
+            placeholder="输入任务内容..."
+          />
+          {/* 优先级图标 */}
+          <span className="text-xs flex-shrink-0" title={`优先级: ${task.priority}`}>
+            {getPriorityIcon(task.priority)}
+          </span>
+          {/* 得分标识 */}
+          {scoreIcon && scoreColor && (
+            <span
+              className="text-xs font-bold flex-shrink-0"
+              style={{ color: scoreColor }}
+              title={`得分: ${task.score}`}
+            >
+              {scoreIcon}
+            </span>
+          )}
+          {/* 风险标识 */}
+          {riskIcon && risk.hasRisk && (
+            <span
+              className="text-xs flex-shrink-0"
+              style={{ color: risk.level === 'high' ? '#EF4444' : '#F59E0B' }}
+              title={`风险: ${risk.reasons.join(', ')}`}
+            >
+              {riskIcon}
+            </span>
+          )}
+        </div>
         {(task.status === 'in_progress' ||
           task.status === 'completed' ||
           task.status === 'confirmed') && (
@@ -99,24 +147,29 @@ export const TaskItem: React.FC<TaskItemProps> = ({
       </div>
 
       {/* Priority */}
-      <select
-        value={task.priority}
-        onChange={e =>
-          onTaskUpdate(task.id, { priority: e.target.value as any })
-        }
-        onClick={(e) => e.stopPropagation()}
-        className={`text-[10px] font-black uppercase bg-transparent outline-none cursor-pointer ${
-          task.priority === 'P0'
-            ? 'text-rose-500'
-            : task.priority === 'P1'
-            ? 'text-orange-500'
-            : 'text-blue-500'
-        }`}
-      >
-        <option value="P0">P0 - Urgent</option>
-        <option value="P1">P1 - High</option>
-        <option value="P2">P2 - Normal</option>
-      </select>
+      <div className="flex items-center gap-1">
+        <span className="text-xs" title={`优先级: ${task.priority}`}>
+          {getPriorityIcon(task.priority)}
+        </span>
+        <select
+          value={task.priority}
+          onChange={e =>
+            onTaskUpdate(task.id, { priority: e.target.value as any })
+          }
+          onClick={(e) => e.stopPropagation()}
+          className={`text-[10px] font-black uppercase bg-transparent outline-none cursor-pointer flex-1 ${
+            task.priority === 'P0'
+              ? 'text-rose-500'
+              : task.priority === 'P1'
+              ? 'text-orange-500'
+              : 'text-blue-500'
+          }`}
+        >
+          <option value="P0">P0 - Urgent</option>
+          <option value="P1">P1 - High</option>
+          <option value="P2">P2 - Normal</option>
+        </select>
+      </div>
 
       {/* Start Date */}
       <input
