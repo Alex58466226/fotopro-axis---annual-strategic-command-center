@@ -417,7 +417,7 @@ export const MapModal: React.FC<MapModalProps> = ({
                 Fotopro AMZ 项目管理器
               </h2>
               <p className="text-xs font-bold text-orange-500 uppercase tracking-widest mt-1">
-                Full Architecture View (L1 - L4)
+                架构视图 (L1 - L4)
               </p>
             </div>
           </div>
