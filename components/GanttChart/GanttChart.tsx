@@ -618,6 +618,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                               borderStyle: borderStyle,
                               opacity: opacity,
                             } : {}),
+                            boxShadow: item.type === 'strategy' ? '0 1px 2px rgba(0,0,0,0.05)' : '0 1px 3px rgba(0,0,0,0.08)',
                           }}
                           title={`${item.text} (L${item.level}): ${item.start} ~ ${item.end}${task && task.score !== undefined ? ` | 得分: ${task.score}` : ''}${risk && risk.hasRisk ? ` | 风险: ${risk.reasons.join(', ')}` : ''}${item.type === 'task' && task && onTaskUpdate ? ' | 拖拽移动时间，拖拽边缘调整时长' : ''}`}
                           onMouseDown={(e) => {
