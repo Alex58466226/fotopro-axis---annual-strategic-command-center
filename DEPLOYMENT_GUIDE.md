@@ -32,6 +32,8 @@
 
 ### 步骤 3：配置环境变量
 
+**⚠️ 重要**：环境变量配置后必须重新部署才能生效！
+
 在 Vercel 项目设置 → **Environment Variables** 中添加：
 
 #### Supabase 配置（必需）
@@ -40,11 +42,19 @@ VITE_SUPABASE_URL=你的_supabase_project_url
 VITE_SUPABASE_ANON_KEY=你的_supabase_anon_key
 ```
 
+**注意**：Supabase 环境变量必须以 `VITE_` 开头！
+
 #### AI 配置（可选，如果使用 AI 功能）
+
+**使用 ohmygpt 平台的 Gemini（推荐）**：
 ```
-GEMINI_API_KEY=你的_gemini_api_key
+GEMINI_API_KEY=sk-你的_api_key
 GEMINI_BASE_URL=https://api.ohmygpt.com/v1
 ```
+
+**注意**：AI 环境变量不需要 `VITE_` 前缀！
+
+详细配置说明请查看：[VERCEL_ENV_SETUP.md](./VERCEL_ENV_SETUP.md)
 
 或者使用其他 AI 模型：
 ```
