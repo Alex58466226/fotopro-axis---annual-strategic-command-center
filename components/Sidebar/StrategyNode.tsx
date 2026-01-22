@@ -48,8 +48,31 @@ export const StrategyNodeComponent: React.FC<StrategyNodeComponentProps> = ({
               : 'bg-white border-slate-100 hover:border-orange-300'
           }`}
         >
-          <div className="flex items-center justify-between mb-0.5">
-            <div className="flex items-center gap-1.5">
+          {/* 标题作为第一行，编辑按钮在右侧 */}
+          <div className="flex items-start justify-between gap-2">
+            <div
+              className={`text-[11px] font-bold truncate flex-1 leading-tight ${
+                isSelected ? 'text-white' : 'text-slate-700'
+              }`}
+            >
+              {node.name}
+            </div>
+            <button
+              type="button"
+              onClick={onEditClick}
+              className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-all flex-shrink-0 mt-0.5 ${
+                isSelected
+                  ? 'text-slate-400 hover:text-white hover:bg-slate-700'
+                  : 'text-slate-300 hover:text-orange-500 hover:bg-orange-50'
+              }`}
+              title="编辑策略"
+            >
+              <Icon name="edit" size={12} />
+            </button>
+          </div>
+          {/* 标签区域移到标题下方，仅在有必要内容时显示 */}
+          {node.group && (
+            <div className="flex items-center gap-1.5 mt-1">
               {/* 层级标签：悬停时显示，完全次要信息 */}
               <span
                 className={`text-[7px] font-normal opacity-0 group-hover:opacity-30 transition-opacity duration-200 ${
@@ -58,34 +81,11 @@ export const StrategyNodeComponent: React.FC<StrategyNodeComponentProps> = ({
               >
                 L{node.level}
               </span>
-              {node.group && (
-                <span className="text-[8px] font-black uppercase text-white bg-indigo-500 px-1.5 py-0.5 rounded shadow-sm truncate max-w-[60px]">
-                  {node.group}
-                </span>
-              )}
+              <span className="text-[8px] font-black uppercase text-white bg-indigo-500 px-1.5 py-0.5 rounded shadow-sm truncate max-w-[60px]">
+                {node.group}
+              </span>
             </div>
-            <div className="flex items-center">
-              <button
-                type="button"
-                onClick={onEditClick}
-                className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-all ${
-                  isSelected
-                    ? 'text-slate-400 hover:text-white hover:bg-slate-700'
-                    : 'text-slate-300 hover:text-orange-500 hover:bg-orange-50'
-                }`}
-                title="编辑策略"
-              >
-                <Icon name="edit" size={12} />
-              </button>
-            </div>
-          </div>
-          <div
-            className={`text-[11px] font-bold truncate ${
-              isSelected ? 'text-white' : 'text-slate-700'
-            }`}
-          >
-            {node.name}
-          </div>
+          )}
         </div>
       </div>
     </div>
