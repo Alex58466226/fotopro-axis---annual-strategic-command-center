@@ -600,7 +600,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                           </span>
                         </div>
                         <div
-                          className={`absolute h-4 rounded-md top-1 hover:opacity-80 transition-all ${
+                          className={`absolute h-5 rounded-lg top-0.5 hover:opacity-90 hover:shadow-md transition-all ${
                             item.type === 'task' && task && onTaskUpdate
                               ? 'cursor-move'
                               : 'cursor-pointer'
