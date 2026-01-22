@@ -274,14 +274,14 @@ export const MapModal: React.FC<MapModalProps> = ({
             {/* 标签移到标题下方，更核心的位置 */}
             <div className="flex justify-between items-start mb-2">
               <div className="flex items-center gap-2 flex-wrap">
-                {/* 层级标签移到不显眼位置 */}
+                {/* 层级标签：悬停时显示，完全次要信息 */}
                 <span
-                  className={`text-[8px] font-normal text-slate-300 opacity-60 ${
+                  className={`text-[7px] font-normal text-slate-300 opacity-0 group-hover:opacity-40 transition-opacity duration-200 ${
                     node.level === 1
-                      ? 'text-slate-400'
+                      ? 'text-slate-300'
                       : node.level === 2
-                      ? 'text-indigo-300'
-                      : 'text-orange-300'
+                      ? 'text-indigo-200'
+                      : 'text-orange-200'
                   }`}
                 >
                   L{node.level}

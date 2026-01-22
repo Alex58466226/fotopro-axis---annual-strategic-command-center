@@ -50,9 +50,10 @@ export const StrategyNodeComponent: React.FC<StrategyNodeComponentProps> = ({
         >
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
+              {/* 层级标签：悬停时显示，完全次要信息 */}
               <span
-                className={`text-[9px] font-black px-1.5 rounded ${
-                  isSelected ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500'
+                className={`text-[7px] font-normal opacity-0 group-hover:opacity-30 transition-opacity duration-200 px-1 ${
+                  isSelected ? 'text-slate-400' : 'text-slate-300'
                 }`}
               >
                 L{node.level}
