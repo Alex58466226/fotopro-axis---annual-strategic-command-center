@@ -313,7 +313,7 @@ export const MapModal: React.FC<MapModalProps> = ({
               )}
             </div>
             <h4 className={`${currentSize.textSize} font-black text-slate-800 mb-1.5`}>{node.name}</h4>
-            <div className={`flex items-center ${currentSize.gap} text-[10px] text-slate-500 font-medium pt-2 border-t border-slate-50`}>
+            <div className={`flex items-center ${currentSize.gap} text-[10px] text-slate-500 font-medium pt-1.5 border-t border-slate-50`}>
               <span className="flex items-center gap-1">
                 <Icon name="user" size={12} /> {node.owner || 'Unassigned'}
               </span>
@@ -333,7 +333,7 @@ export const MapModal: React.FC<MapModalProps> = ({
           </div>
         </div>
         {isExpanded && hasChildren && (
-          <div className="mt-4 ml-2 space-y-2">
+          <div className="mt-3 ml-2 space-y-1.5">
             {childStrategies.map(child => (
               <DroppableArea key={child.id} node={child}>
                 <DraggableStrategyNode node={child} />
