@@ -52,6 +52,9 @@ export interface Task {
 
   notes: string;    // 简报/备注
   reports: TaskReport[]; // 多次汇报记录
+  
+  // v2.6 Drag & Drop
+  order?: number;   // 排序顺序（用于拖拽排序）
 }
 
 // 策略树节点 (L1-L3)

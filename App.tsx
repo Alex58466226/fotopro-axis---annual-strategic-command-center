@@ -1033,6 +1033,22 @@ const App: React.FC = () => {
     showToast('success', `导入成功！策略: ${importedStrategies.length} 个，任务: ${importedTasks.length} 个`);
   };
 
+  // 处理任务重新排序（拖拽后）
+  const handleTasksReorder = (reorderedTasks: Task[]) => {
+    setTasks(prev => {
+      // 更新所有任务的 order 值
+      const updatedTasks = prev.map(task => {
+        const reorderedTask = reorderedTasks.find(rt => rt.id === task.id);
+        if (reorderedTask) {
+          return { ...task, order: reorderedTask.order };
+        }
+        return task;
+      });
+      return updatedTasks;
+    });
+    addLog('UPDATE', 'TASK', 'System', 'Tasks reordered via drag and drop');
+  };
+
   const updateTask = (id: string, updates: Partial<Task>) => {
     setTasks(prev => {
       const task = prev.find(t => t.id === id);
@@ -1387,6 +1403,7 @@ const App: React.FC = () => {
             onSelectSuggestion={handleSelectSuggestion}
             suggestions={taskSuggestions}
             onLoadSuggestions={loadTaskSuggestions}
+            onTasksReorder={handleTasksReorder}
           />
           <footer className="text-center text-[9px] text-slate-300 font-medium py-4">FOTOPRO AXIS STRATEGIC SYSTEM v2.4 · BUILD {TODAY_STR.replace(/-/g, '')}</footer>
         </div>
