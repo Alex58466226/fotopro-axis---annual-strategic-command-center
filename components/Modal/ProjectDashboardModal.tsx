@@ -13,6 +13,11 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
 } from 'recharts';
 import Icon from '../Icon';
 import { StrategyNode, Task } from '../../types';
@@ -46,6 +51,7 @@ interface DashboardMetrics {
     averageTasksPerStrategy: number;
   };
   riskTasks: Task[];
+  radarData: { dimension: string; value: number; fullMark: number }[];
 }
 
 const COLORS = {
@@ -168,6 +174,62 @@ export const ProjectDashboardModal: React.FC<ProjectDashboardModalProps> = ({
       return false;
     });
 
+    // 6. 雷达图数据计算
+    // 颗粒度（执行数量）：基于任务数量，0-100分
+    // 理想值：每个L3策略有5-8个任务，满分100
+    const granularityScore = (() => {
+      if (l3Strategies.length === 0) return 0;
+      const idealTasksPerStrategy = 6.5; // 理想值
+      const currentAvg = averageTasksPerStrategy;
+      if (currentAvg === 0) return 0;
+      // 计算与理想值的接近程度
+      const diff = Math.abs(currentAvg - idealTasksPerStrategy);
+      const score = Math.max(0, 100 - (diff / idealTasksPerStrategy) * 100);
+      return Math.min(100, Math.round(score));
+    })();
+
+    // 质量（平均得分）：已有计算，直接使用
+    const qualityScore = Math.round(averageScore);
+
+    // 时间效率（及时交付）：已有计算，直接使用
+    const timeEfficiencyScore = Math.round(timeEfficiencyValue);
+
+    // 进度完成度：基于平均进度
+    const progressScore = Math.round(averageProgress);
+
+    // 风险控制：基于风险任务比例，风险任务越少分数越高
+    const riskControlScore = (() => {
+      if (branchTasks.length === 0) return 0;
+      const riskRatio = riskTasks.length / branchTasks.length;
+      return Math.round(Math.max(0, (1 - riskRatio) * 100));
+    })();
+
+    // 事项拆分合理性：基于每个L3策略的平均任务数
+    const breakdownScore = (() => {
+      if (averageTasksPerStrategy === 0) return 0;
+      // 理想范围：3-10个任务
+      if (averageTasksPerStrategy >= 3 && averageTasksPerStrategy <= 10) {
+        return 100;
+      } else if (averageTasksPerStrategy < 3) {
+        // 少于3个：按比例给分
+        return Math.round((averageTasksPerStrategy / 3) * 100);
+      } else {
+        // 多于10个：按比例扣分
+        const excess = averageTasksPerStrategy - 10;
+        return Math.max(0, Math.round(100 - (excess / 10) * 50));
+      }
+    })();
+
+    // 构建雷达图数据
+    const radarData = [
+      { dimension: '颗粒度', value: granularityScore, fullMark: 100 },
+      { dimension: '质量', value: qualityScore, fullMark: 100 },
+      { dimension: '时间效率', value: timeEfficiencyScore, fullMark: 100 },
+      { dimension: '进度完成', value: progressScore, fullMark: 100 },
+      { dimension: '风险控制', value: riskControlScore, fullMark: 100 },
+      { dimension: '拆分合理性', value: breakdownScore, fullMark: 100 },
+    ];
+
     return {
       taskScore: {
         average: Math.round(averageScore),
@@ -192,6 +254,7 @@ export const ProjectDashboardModal: React.FC<ProjectDashboardModalProps> = ({
         averageTasksPerStrategy: Math.round(averageTasksPerStrategy * 10) / 10,
       },
       riskTasks: riskTasks.slice(0, 10), // 最多显示 10 个风险任务
+      radarData, // 雷达图数据
     };
   }, [activeNode, strategies, tasks, activeBranchIds]);
 
@@ -352,6 +415,66 @@ ${metrics.riskTasks.map((t, idx) => `${idx + 1}. ${t.text} (得分: ${t.score ||
               <div className="text-xs text-[#9B9A97]">
                 平均每个 L3 策略 {metrics.taskBreakdown.averageTasksPerStrategy} 个任务
               </div>
+            </div>
+          </div>
+
+          {/* 雷达图 - 综合评估 */}
+          <div className="bg-white border border-[#E9E9E7] rounded-xl p-4 mb-6">
+            <h3 className="text-sm font-semibold text-[#37352F] mb-4">项目综合评估雷达图</h3>
+            <ResponsiveContainer width="100%" height={400}>
+              <RadarChart data={metrics.radarData}>
+                <PolarGrid stroke="#E9E9E7" />
+                <PolarAngleAxis
+                  dataKey="dimension"
+                  tick={{ fill: '#787774', fontSize: 12 }}
+                  className="text-xs"
+                />
+                <PolarRadiusAxis
+                  angle={90}
+                  domain={[0, 100]}
+                  tick={{ fill: '#9B9A97', fontSize: 10 }}
+                  tickCount={6}
+                />
+                <Radar
+                  name="项目评估"
+                  dataKey="value"
+                  stroke="#3B82F6"
+                  fill="#3B82F6"
+                  fillOpacity={0.6}
+                  strokeWidth={2}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    border: '1px solid #E9E9E7',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                  }}
+                  formatter={(value: number) => [`${value} 分`, '得分']}
+                />
+                <Legend
+                  wrapperStyle={{ fontSize: '12px', color: '#787774' }}
+                  iconType="circle"
+                />
+              </RadarChart>
+            </ResponsiveContainer>
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+              {metrics.radarData.map((item) => (
+                <div key={item.dimension} className="flex items-center justify-between">
+                  <span className="text-[#787774]">{item.dimension}:</span>
+                  <span
+                    className={`font-semibold ${
+                      item.value >= 80
+                        ? 'text-emerald-600'
+                        : item.value >= 60
+                        ? 'text-amber-600'
+                        : 'text-red-600'
+                    }`}
+                  >
+                    {item.value} 分
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
 
