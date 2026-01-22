@@ -271,9 +271,19 @@ export const MapModal: React.FC<MapModalProps> = ({
             }}
             {...(canDrag ? { ...attributes, ...listeners } : {})}
           >
+            {/* 标题作为第一行，标签和可拖拽标识在同一行 */}
+            <div className="flex items-start justify-between gap-2 mb-1.5">
+              <h4 className={`${currentSize.titleSize} font-black text-slate-800 flex-1 leading-tight`}>{node.name}</h4>
+              {/* 可拖拽标识移到右上角 */}
+              {canDrag && (
+                <div className="text-[8px] text-indigo-500 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded font-medium flex-shrink-0 mt-0.5">
+                  ✨
+                </div>
+              )}
+            </div>
             {/* 标签移到标题下方，更核心的位置 */}
-            <div className="flex justify-between items-start mb-1.5">
-              <div className="flex items-center gap-1.5 flex-wrap">
+            {(node.group || (node.tags && node.tags.length > 0)) && (
+              <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
                 {/* 层级标签：悬停时显示，完全次要信息 */}
                 <span
                   className={`text-[7px] font-normal text-slate-300 opacity-0 group-hover:opacity-40 transition-opacity duration-200 ${
@@ -305,14 +315,7 @@ export const MapModal: React.FC<MapModalProps> = ({
                   </div>
                 )}
               </div>
-              {/* 可拖拽标识移到右上角，不重叠 */}
-              {canDrag && (
-                <div className="text-[8px] text-indigo-500 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
-                  ✨
-                </div>
-              )}
-            </div>
-            <h4 className={`${currentSize.textSize} font-black text-slate-800 mb-1.5`}>{node.name}</h4>
+            )}
             <div className={`flex items-center ${currentSize.gap} text-[10px] text-slate-500 font-medium pt-1.5 border-t border-slate-50`}>
               <span className="flex items-center gap-1">
                 <Icon name="user" size={12} /> {node.owner || 'Unassigned'}
