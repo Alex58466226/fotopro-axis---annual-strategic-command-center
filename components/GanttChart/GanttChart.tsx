@@ -24,6 +24,7 @@ interface GanttChartProps {
   onToggleCollapse: () => void;
   onScaleChange: (delta: number) => void;
   onHeightResize: (e: React.MouseEvent, currentHeight: number) => void;
+  onTaskUpdate?: (id: string, updates: Partial<Task>) => void; // 新增：任务更新回调
 }
 
 /**
@@ -39,9 +40,27 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   onToggleCollapse,
   onScaleChange,
   onHeightResize,
+  onTaskUpdate,
 }) => {
   // 滚动容器引用
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  
+  // 拖拽状态
+  const dragState = React.useRef<{
+    isDragging: boolean;
+    taskId: string | null;
+    startX: number;
+    originalStart: string;
+    originalEnd: string;
+    dragType: 'move' | 'resize-start' | 'resize-end' | null;
+  }>({
+    isDragging: false,
+    taskId: null,
+    startX: 0,
+    originalStart: '',
+    originalEnd: '',
+    dragType: null,
+  });
   
   // 计算总宽度（基于 PROJECT_START 到 PROJECT_END）
   const totalWidth = React.useMemo(() => {
@@ -61,6 +80,83 @@ export const GanttChart: React.FC<GanttChartProps> = ({
       scrollContainerRef.current.scrollLeft = scrollLeft;
     }
   }, [isCollapsed, scale]);
+
+  // 处理拖拽移动
+  const handleDragMove = React.useCallback((e: MouseEvent) => {
+    if (!dragState.current.isDragging || !dragState.current.taskId || !scrollContainerRef.current) return;
+    
+    const deltaX = e.clientX - dragState.current.startX;
+    const deltaDays = Math.round(deltaX / scale);
+    
+    if (deltaDays === 0) return; // 没有移动
+    
+    const task = tasks.find(t => t.id === dragState.current.taskId);
+    if (!task || !onTaskUpdate) return;
+    
+    let newStart: string;
+    let newEnd: string;
+    
+    if (dragState.current.dragType === 'resize-start') {
+      // 调整开始时间
+      const originalStart = new Date(dragState.current.originalStart);
+      originalStart.setDate(originalStart.getDate() + deltaDays);
+      newStart = originalStart.toISOString().split('T')[0];
+      newEnd = dragState.current.originalEnd;
+      
+      // 确保开始时间不晚于结束时间
+      if (new Date(newStart) >= new Date(newEnd)) {
+        const endDate = new Date(newEnd);
+        endDate.setDate(endDate.getDate() + 1);
+        newEnd = endDate.toISOString().split('T')[0];
+      }
+    } else if (dragState.current.dragType === 'resize-end') {
+      // 调整结束时间
+      const originalEnd = new Date(dragState.current.originalEnd);
+      originalEnd.setDate(originalEnd.getDate() + deltaDays);
+      newStart = dragState.current.originalStart;
+      newEnd = originalEnd.toISOString().split('T')[0];
+      
+      // 确保结束时间不早于开始时间
+      if (new Date(newEnd) <= new Date(newStart)) {
+        const startDate = new Date(newStart);
+        startDate.setDate(startDate.getDate() - 1);
+        newStart = startDate.toISOString().split('T')[0];
+      }
+    } else {
+      // 移动整个任务（保持时长不变）
+      const originalStart = new Date(dragState.current.originalStart);
+      const originalEnd = new Date(dragState.current.originalEnd);
+      originalStart.setDate(originalStart.getDate() + deltaDays);
+      originalEnd.setDate(originalEnd.getDate() + deltaDays);
+      newStart = originalStart.toISOString().split('T')[0];
+      newEnd = originalEnd.toISOString().split('T')[0];
+    }
+    
+    // 更新任务时间
+    onTaskUpdate(dragState.current.taskId, {
+      start: newStart,
+      end: newEnd,
+    });
+    
+    // 更新拖拽起始位置，以便连续拖拽
+    dragState.current.startX = e.clientX;
+    dragState.current.originalStart = newStart;
+    dragState.current.originalEnd = newEnd;
+  }, [tasks, scale, onTaskUpdate]);
+
+  // 处理拖拽结束
+  const handleDragEnd = React.useCallback(() => {
+    dragState.current = {
+      isDragging: false,
+      taskId: null,
+      startX: 0,
+      originalStart: '',
+      originalEnd: '',
+      dragType: null,
+    };
+    document.removeEventListener('mousemove', handleDragMove);
+    document.removeEventListener('mouseup', handleDragEnd);
+  }, [handleDragMove]);
 
   // 构建甘特图数据：包含策略节点（L1-L3）和任务（L4-L5）
   const ganttItems: GanttItem[] = React.useMemo(() => {
@@ -144,11 +240,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     return items;
   }, [strategies, tasks, scale]); // strategies 和 tasks 已经是筛选后的数据
 
-  // 月份刻度线数据 - 必须在组件顶层，不能在条件渲染内
+  // 月份刻度线数据
   const monthMarks = React.useMemo(() => {
     const start = new Date(PROJECT_START);
     const end = new Date(PROJECT_END);
-    const marks: { date: Date; offset: number; label: string }[] = [];
+    const marks: { date: Date; offset: number; label: string; isMonth: boolean }[] = [];
     
     // 生成月份刻度
     let current = new Date(start);
@@ -158,9 +254,47 @@ export const GanttChart: React.FC<GanttChartProps> = ({
       marks.push({
         date: new Date(current),
         offset,
-        label: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`
+        label: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`,
+        isMonth: true,
       });
       current.setMonth(current.getMonth() + 1);
+    }
+    
+    return marks;
+  }, [scale]);
+
+  // 每日日期刻度线数据
+  const dayMarks = React.useMemo(() => {
+    const start = new Date(PROJECT_START);
+    const end = new Date(PROJECT_END);
+    const marks: { date: Date; offset: number; label: string; dayOfMonth: number }[] = [];
+    
+    // 根据 scale 决定显示间隔
+    // scale 越大，可以显示更密集的日期
+    const dayInterval = scale >= 10 ? 1 : scale >= 5 ? 3 : scale >= 2 ? 7 : 14; // 每天/每3天/每周/每两周
+    
+    let current = new Date(start);
+    while (current <= end) {
+      const dateStr = current.toISOString().split('T')[0];
+      const offset = getDayOffset(dateStr, scale);
+      const dayOfMonth = current.getDate();
+      
+      // 只在月初或间隔日期显示
+      const shouldShow = dayOfMonth === 1 || (dayOfMonth % dayInterval === 0);
+      
+      if (shouldShow) {
+        marks.push({
+          date: new Date(current),
+          offset,
+          label: dayOfMonth === 1 
+            ? `${current.getMonth() + 1}/${dayOfMonth}` 
+            : String(dayOfMonth),
+          dayOfMonth,
+        });
+      }
+      
+      // 移动到下一天
+      current.setDate(current.getDate() + 1);
     }
     
     return marks;
@@ -248,29 +382,51 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                   minWidth: '800px'
                 }}
               >
-                {/* 时间轴刻度线 */}
-                <div className="absolute top-0 left-0 h-8 border-b border-[#E9E9E7] bg-white z-10" style={{ width: `${totalWidth + 200}px` }}>
-                  {/* 月份刻度线 */}
-                  {monthMarks.map((mark, idx) => (
-                    <div key={idx} className="absolute top-0 bottom-0 flex flex-col items-center" style={{ left: `${mark.offset + 140}px` }}>
-                      <div className="w-px h-full bg-[#E9E9E7]" />
-                      <div className="absolute bottom-0 text-[10px] text-[#787774] font-medium whitespace-nowrap">
-                        {mark.label}
+                {/* 时间轴刻度线 - 两层：月份和日期 */}
+                <div className="absolute top-0 left-0 border-b border-[#E9E9E7] bg-white z-10" style={{ width: `${totalWidth + 200}px`, height: scale >= 5 ? '48px' : '32px' }}>
+                  {/* 月份刻度线（上层） */}
+                  <div className="absolute top-0 left-0 right-0 h-6 border-b border-[#E9E9E7]">
+                    {monthMarks.map((mark, idx) => (
+                      <div key={`month-${idx}`} className="absolute top-0 bottom-0 flex flex-col items-center" style={{ left: `${mark.offset + 140}px` }}>
+                        <div className="w-px h-full bg-[#D9D9D7]" />
+                        <div className="absolute bottom-0 text-[10px] text-[#787774] font-semibold whitespace-nowrap">
+                          {mark.label}
+                        </div>
                       </div>
+                    ))}
+                  </div>
+                  
+                  {/* 每日日期刻度线（下层，仅在 scale >= 5 时显示） */}
+                  {scale >= 5 && (
+                    <div className="absolute top-6 left-0 right-0 h-6">
+                      {dayMarks.map((mark, idx) => (
+                        <div 
+                          key={`day-${idx}`} 
+                          className="absolute top-0 bottom-0 flex flex-col items-center" 
+                          style={{ left: `${mark.offset + 140}px` }}
+                        >
+                          <div className={`w-px h-full ${mark.dayOfMonth === 1 ? 'bg-[#D9D9D7]' : 'bg-[#E9E9E7]'}`} />
+                          <div className={`absolute bottom-0 text-[8px] whitespace-nowrap ${
+                            mark.dayOfMonth === 1 ? 'text-[#787774] font-medium' : 'text-[#9B9A97]'
+                          }`}>
+                            {mark.label}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                   
                   {/* 今天标记线 */}
                   <div
-                    className="absolute top-0 bottom-0 w-px bg-[#E16259] z-20"
-                    style={{ left: `${getDayOffset(TODAY_STR, scale)}px` }}
+                    className="absolute top-0 bottom-0 w-0.5 bg-[#E16259] z-20"
+                    style={{ left: `${getDayOffset(TODAY_STR, scale) + 140}px` }}
                   >
                     <div className="absolute -top-1 -left-3 bg-[#E16259] text-white text-[9px] px-1.5 py-0.5 rounded-md whitespace-nowrap font-medium">
                       NOW
                     </div>
                   </div>
                 </div>
-                <div className="pt-10 space-y-2">
+                <div className={`space-y-2 ${scale >= 5 ? 'pt-16' : 'pt-10'}`}>
                   {ganttItems.map(item => {
                     const offset = getDayOffset(item.start, scale);
                     const width = Math.max(20, getDayOffset(item.end, scale) - offset);
@@ -350,7 +506,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                           </span>
                         </div>
                         <div
-                          className={`absolute h-4 rounded-md top-1 hover:opacity-80 transition-all cursor-pointer ${
+                          className={`absolute h-4 rounded-md top-1 hover:opacity-80 transition-all ${
+                            item.type === 'task' && task && onTaskUpdate
+                              ? 'cursor-move'
+                              : 'cursor-pointer'
+                          } ${
                             item.type === 'strategy' || !task ? bgColor : ''
                           }`}
                           style={{
@@ -365,8 +525,44 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                               opacity: opacity,
                             } : {}),
                           }}
-                          title={`${item.text} (L${item.level}): ${item.start} ~ ${item.end}${task && task.score !== undefined ? ` | 得分: ${task.score}` : ''}${risk && risk.hasRisk ? ` | 风险: ${risk.reasons.join(', ')}` : ''}`}
-                        />
+                          title={`${item.text} (L${item.level}): ${item.start} ~ ${item.end}${task && task.score !== undefined ? ` | 得分: ${task.score}` : ''}${risk && risk.hasRisk ? ` | 风险: ${risk.reasons.join(', ')}` : ''}${item.type === 'task' && task && onTaskUpdate ? ' | 拖拽移动时间，拖拽边缘调整时长' : ''}`}
+                          onMouseDown={(e) => {
+                            if (item.type === 'task' && task && onTaskUpdate) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const clickX = e.clientX - rect.left;
+                              const isNearStart = clickX < 8; // 左侧 8px 内
+                              const isNearEnd = clickX > width - 8; // 右侧 8px 内
+                              
+                              dragState.current = {
+                                isDragging: true,
+                                taskId: task.id,
+                                startX: e.clientX,
+                                originalStart: task.start,
+                                originalEnd: task.end,
+                                dragType: isNearStart ? 'resize-start' : isNearEnd ? 'resize-end' : 'move',
+                              };
+                              
+                              document.addEventListener('mousemove', handleDragMove);
+                              document.addEventListener('mouseup', handleDragEnd);
+                            }
+                          }}
+                        >
+                          {/* 调整手柄（仅在任务类型时显示） */}
+                          {item.type === 'task' && task && onTaskUpdate && (
+                            <>
+                              <div
+                                className="absolute left-0 top-0 bottom-0 w-1.5 bg-blue-500/50 hover:bg-blue-500 cursor-ew-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="拖拽调整开始时间"
+                              />
+                              <div
+                                className="absolute right-0 top-0 bottom-0 w-1.5 bg-blue-500/50 hover:bg-blue-500 cursor-ew-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="拖拽调整结束时间"
+                              />
+                            </>
+                          )}
+                        </div>
                       </div>
                     );
                   })}

@@ -1384,6 +1384,7 @@ const App: React.FC = () => {
             onToggleCollapse={handleGanttToggle}
             onScaleChange={delta => setGanttScale(prev => Math.max(2, Math.min(20, prev + delta)))}
             onHeightResize={(e, currentHeight) => startResize(e, setGanttHeight, currentHeight)}
+            onTaskUpdate={updateTask}
           />
 
           <TaskList
