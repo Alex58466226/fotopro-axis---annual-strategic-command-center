@@ -281,8 +281,8 @@ export const MapModal: React.FC<MapModalProps> = ({
                 </div>
               )}
             </div>
-            {/* 第二行：显示摘要信息、标签等 */}
-            <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+            {/* 第二行：显示摘要信息、标签等 - 左对齐 */}
+            <div className="flex items-center gap-1.5 flex-wrap justify-start mb-1.5">
               {/* 层级标签：悬停时显示，完全次要信息 */}
               <span
                 className={`text-[7px] font-normal text-slate-300 opacity-0 group-hover:opacity-40 transition-opacity duration-200 ${
