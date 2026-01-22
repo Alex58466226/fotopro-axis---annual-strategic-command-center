@@ -534,12 +534,18 @@ const App: React.FC = () => {
 
     const saveData = async () => {
       try {
+        // 检查用户是否登录
+        if (!currentUser) {
+          console.warn('用户未登录，跳过数据保存');
+          return;
+        }
+
         // 保存策略数据
         const strategiesResult = await saveStrategies(strategies);
         if (!strategiesResult.success) {
           console.error('保存策略数据失败:', strategiesResult.error);
           setStorageError(`保存策略数据失败: ${strategiesResult.error}`);
-          setTimeout(() => setStorageError(null), 3000);
+          setTimeout(() => setStorageError(null), 5000); // 延长显示时间以便查看
           return;
         }
 
@@ -548,7 +554,7 @@ const App: React.FC = () => {
         if (!tasksResult.success) {
           console.error('保存任务数据失败:', tasksResult.error);
           setStorageError(`保存任务数据失败: ${tasksResult.error}`);
-          setTimeout(() => setStorageError(null), 3000);
+          setTimeout(() => setStorageError(null), 5000);
           return;
         }
 

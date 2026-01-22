@@ -3,7 +3,7 @@
  * 支持的模型：Gemini, OpenAI, DeepSeek, 通义千问等
  */
 
-type AIModel = 'gemini' | 'openai' | 'deepseek' | 'qwen' | 'none';
+type AIModel = 'gemini' | 'openai' | 'deepseek' | 'qwen' | 'doubao' | 'glm4' | 'k2' | 'gemini-proxy' | 'none';
 
 interface AIConfig {
   model: AIModel;
@@ -13,11 +13,19 @@ interface AIConfig {
 
 // 从环境变量读取配置
 const getAIConfig = (): AIConfig => {
-  // 优先使用 Gemini
-  if (process.env.GEMINI_API_KEY) {
+  // 优先使用 Gemini（官方 API，AIzaSy 格式）
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.startsWith('AIzaSy')) {
     return {
       model: 'gemini',
       apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY
+    };
+  }
+  // 支持聚合平台的 Gemini（OpenAI 兼容格式，sk- 开头）
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.startsWith('sk-')) {
+    return {
+      model: 'gemini-proxy',
+      apiKey: process.env.GEMINI_API_KEY,
+      baseURL: process.env.GEMINI_BASE_URL || 'https://api.ohmygpt.com/v1' // 默认使用 ohmygpt
     };
   }
   // 支持 OpenAI
@@ -44,6 +52,30 @@ const getAIConfig = (): AIConfig => {
       baseURL: process.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/api/v1'
     };
   }
+  // 支持豆包（字节跳动）
+  if (process.env.DOUBAO_API_KEY) {
+    return {
+      model: 'doubao',
+      apiKey: process.env.DOUBAO_API_KEY,
+      baseURL: process.env.DOUBAO_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3'
+    };
+  }
+  // 支持 GLM-4（智谱AI）
+  if (process.env.GLM4_API_KEY) {
+    return {
+      model: 'glm4',
+      apiKey: process.env.GLM4_API_KEY,
+      baseURL: process.env.GLM4_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4'
+    };
+  }
+  // 支持 K2（昆仑万维）
+  if (process.env.K2_API_KEY) {
+    return {
+      model: 'k2',
+      apiKey: process.env.K2_API_KEY,
+      baseURL: process.env.K2_BASE_URL || 'https://api.siliconflow.cn/v1'
+    };
+  }
   
   return { model: 'none' };
 };
@@ -62,7 +94,11 @@ const callOpenAICompatibleAPI = async (
     const modelMap: Record<string, string> = {
       'openai': 'gpt-4o-mini',
       'deepseek': 'deepseek-chat',
-      'qwen': 'qwen-turbo'
+      'qwen': 'qwen-turbo',
+      'doubao': 'doubao-pro-32k', // 豆包 Pro 32K
+      'glm4': 'glm-4', // GLM-4
+      'k2': 'K2/K2.1-72B', // K2 模型
+      'gemini-proxy': 'gemini-2.5-flash-lite' // ohmygpt 平台的 Gemini 2.5 Flash Lite
     };
 
     const model = modelMap[config.model] || 'gpt-4o-mini';
@@ -165,6 +201,7 @@ export const suggestL4Tasks = async (strategyName: string, parentContext: string
   let result: string | null = null;
 
   if (config.model === 'gemini' && config.apiKey) {
+    // 使用官方 Gemini API（AIzaSy 格式）
     const { Type } = await import("@google/genai");
     const geminiSchema = {
       type: Type.ARRAY,
@@ -179,6 +216,7 @@ export const suggestL4Tasks = async (strategyName: string, parentContext: string
     };
     result = await callGeminiAPI(prompt, config.apiKey, geminiSchema);
   } else if (config.model !== 'none' && config.apiKey) {
+    // 使用 OpenAI 兼容 API（包括聚合平台的 Gemini）
     result = await callOpenAICompatibleAPI(prompt, config, responseSchema);
   }
 
@@ -257,6 +295,7 @@ export const generateWeeklyReport = async (
   let result: string | null = null;
 
   if (config.model === 'gemini' && config.apiKey) {
+    // 使用官方 Gemini API（AIzaSy 格式）
     const { Type } = await import("@google/genai");
     const geminiSchema = {
       type: Type.ARRAY,
@@ -274,6 +313,7 @@ export const generateWeeklyReport = async (
     };
     result = await callGeminiAPI(prompt, config.apiKey, geminiSchema);
   } else if (config.model !== 'none' && config.apiKey) {
+    // 使用 OpenAI 兼容 API（包括聚合平台的 Gemini）
     result = await callOpenAICompatibleAPI(prompt, config, responseSchema);
   }
 

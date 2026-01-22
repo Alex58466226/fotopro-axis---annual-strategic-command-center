@@ -48,6 +48,26 @@ export async function loadStrategies(): Promise<StrategyNode[]> {
 
 export async function saveStrategies(strategies: StrategyNode[]): Promise<{ success: boolean; error?: string }> {
   try {
+    // 检查 Supabase 配置
+    const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return { 
+        success: false, 
+        error: 'Supabase 环境变量未配置。请在 .env.local 中配置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY' 
+      };
+    }
+
+    // 检查用户是否登录
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      return { 
+        success: false, 
+        error: '用户未登录。请先登录后再保存数据。' 
+      };
+    }
+
     // 转换数据格式
     const rows = strategies.map(s => ({
       id: s.id,
@@ -62,7 +82,8 @@ export async function saveStrategies(strategies: StrategyNode[]): Promise<{ succ
       product: s.product || '',
       tags: s.tags || [],
       description: s.description || '',
-      metrics: s.metrics || [],
+      metrics: Array.isArray(s.metrics) ? s.metrics : [],
+      created_by: session.user.id, // 添加创建者 ID
     }));
 
     // 使用 upsert 操作（如果存在则更新，不存在则插入）
@@ -72,7 +93,13 @@ export async function saveStrategies(strategies: StrategyNode[]): Promise<{ succ
 
     if (error) {
       console.error('保存策略数据失败:', error);
-      return { success: false, error: error.message };
+      console.error('错误详情:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+      return { success: false, error: error.message || '保存失败' };
     }
 
     return { success: true };
