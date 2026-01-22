@@ -1,11 +1,11 @@
 /**
- * 认证服务
- * 处理用户认证相关的业务逻辑
+ * 认证服务 - Supabase Auth 版本
+ * 使用 Supabase Auth 处理用户认证，密码自动哈希存储
  */
 
+import { supabase } from './supabaseClient';
 import { User, AuditLog } from '../types';
 import { AVATAR_COLORS } from '../constants';
-import { saveToStorage, removeFromStorage, STORAGE_KEYS } from './storageService';
 
 /**
  * 生成唯一 ID
@@ -13,7 +13,7 @@ import { saveToStorage, removeFromStorage, STORAGE_KEYS } from './storageService
 const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 999)}`;
 
 /**
- * 登录验证
+ * 登录结果
  */
 export interface LoginResult {
   success: boolean;
@@ -21,11 +21,14 @@ export interface LoginResult {
   error?: string;
 }
 
-export function validateLogin(
+/**
+ * 使用 Supabase Auth 登录
+ * 注意：Supabase 使用 email 作为登录标识，这里我们将 username 作为 email 使用
+ */
+export async function loginWithSupabase(
   username: string,
-  password: string,
-  users: User[]
-): LoginResult {
+  password: string
+): Promise<LoginResult> {
   if (!username.trim() || !password.trim()) {
     return {
       success: false,
@@ -33,53 +36,59 @@ export function validateLogin(
     };
   }
 
-  const user = users.find(
-    u => u.username.toLowerCase() === username.toLowerCase().trim() && u.password === password
-  );
+  try {
+    // Supabase Auth 使用 email 登录，我们将 username 作为 email
+    // 如果用户注册时使用的是 email 格式，直接使用；否则需要确保一致性
+    const email = username.includes('@') ? username : `${username}@fotopro.local`;
 
-  if (!user) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error || !data.user) {
+      return {
+        success: false,
+        error: error?.message || '用户名或密码错误',
+      };
+    }
+
+    // 从 profiles 表加载用户扩展信息
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', data.user.id)
+      .single();
+
+    if (profileError && profileError.code !== 'PGRST116') {
+      // PGRST116 表示未找到记录，这是正常的（新用户可能还没有 profile）
+      console.error('加载用户信息失败:', profileError);
+    }
+
+    // 构建应用用户对象
+    const appUser: User = {
+      id: data.user.id,
+      username: profile?.username || username,
+      password: '', // 不再存储密码
+      role: (profile?.role as 'Admin' | 'User' | 'Viewer') || 'User',
+      avatarColor: profile?.avatar_color || AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
+    };
+
+    return {
+      success: true,
+      user: appUser,
+    };
+  } catch (error: any) {
+    console.error('登录异常:', error);
     return {
       success: false,
-      error: '用户名或密码错误',
+      error: error.message || '登录失败，请稍后重试',
     };
   }
-
-  return {
-    success: true,
-    user,
-  };
 }
 
 /**
- * 保存登录状态
- */
-export function saveLoginState(user: User): { success: boolean; error?: string } {
-  const result = saveToStorage(STORAGE_KEYS.USER, user);
-  if (!result.success) {
-    return {
-      success: false,
-      error: result.error || '保存登录状态失败',
-    };
-  }
-  return { success: true };
-}
-
-/**
- * 清除登录状态
- */
-export function clearLoginState(): { success: boolean; error?: string } {
-  const result = removeFromStorage(STORAGE_KEYS.USER);
-  if (!result.success) {
-    return {
-      success: false,
-      error: result.error || '清除登录状态失败',
-    };
-  }
-  return { success: true };
-}
-
-/**
- * 注册验证
+ * 注册结果
  */
 export interface RegisterResult {
   success: boolean;
@@ -87,12 +96,14 @@ export interface RegisterResult {
   error?: string;
 }
 
-export function validateRegister(
+/**
+ * 使用 Supabase Auth 注册
+ */
+export async function registerWithSupabase(
   username: string,
   password: string,
-  confirmPassword: string,
-  existingUsers: User[]
-): RegisterResult {
+  confirmPassword: string
+): Promise<RegisterResult> {
   if (!username.trim() || !password.trim()) {
     return {
       success: false,
@@ -107,45 +118,95 @@ export function validateRegister(
     };
   }
 
-  if (existingUsers.some(u => u.username.toLowerCase() === username.toLowerCase().trim())) {
+  // 检查用户名是否已存在
+  const email = username.includes('@') ? username : `${username}@fotopro.local`;
+  const { data: existingUsers } = await supabase
+    .from('profiles')
+    .select('username')
+    .eq('username', username)
+    .limit(1);
+
+  if (existingUsers && existingUsers.length > 0) {
     return {
       success: false,
       error: '用户名已存在',
     };
   }
 
-  // 第一个注册的用户自动成为 Admin
-  const role = existingUsers.length === 0 ? 'Admin' : 'User';
+  try {
+    // 使用 Supabase Auth 注册
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
 
-  const newUser: User = {
-    id: generateId('user'),
-    username: username.trim(),
-    password,
-    role,
-    avatarColor: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
-  };
+    if (error || !data.user) {
+      return {
+        success: false,
+        error: error?.message || '注册失败',
+      };
+    }
 
-  return {
-    success: true,
-    user: newUser,
-  };
+    // 检查是否是第一个用户（自动成为 Admin）
+    const { count } = await supabase
+      .from('profiles')
+      .select('id', { count: 'exact', head: true });
+
+    const role = (count || 0) === 0 ? 'Admin' : 'User';
+
+    // 创建 profile 记录
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id: data.user.id,
+        username: username.trim(),
+        role,
+        avatar_color: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
+      });
+
+    if (profileError) {
+      console.error('创建用户信息失败:', profileError);
+      // 即使 profile 创建失败，用户也已经注册成功，可以继续
+    }
+
+    // 构建应用用户对象
+    const appUser: User = {
+      id: data.user.id,
+      username: username.trim(),
+      password: '', // 不再存储密码
+      role,
+      avatarColor: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
+    };
+
+    return {
+      success: true,
+      user: appUser,
+    };
+  } catch (error: any) {
+    console.error('注册异常:', error);
+    return {
+      success: false,
+      error: error.message || '注册失败，请稍后重试',
+    };
+  }
 }
 
 /**
- * 重置密码验证
+ * 重置密码结果
  */
 export interface ResetPasswordResult {
   success: boolean;
-  updatedUser?: User;
   error?: string;
 }
 
-export function validateResetPassword(
+/**
+ * 使用 Supabase Auth 重置密码
+ */
+export async function resetPasswordWithSupabase(
   username: string,
   password: string,
-  confirmPassword: string,
-  existingUsers: User[]
-): ResetPasswordResult {
+  confirmPassword: string
+): Promise<ResetPasswordResult> {
   if (!username.trim() || !password.trim()) {
     return {
       success: false,
@@ -160,26 +221,114 @@ export function validateResetPassword(
     };
   }
 
-  const userIndex = existingUsers.findIndex(
-    u => u.username.toLowerCase() === username.toLowerCase().trim()
-  );
+  try {
+    const email = username.includes('@') ? username : `${username}@fotopro.local`;
 
-  if (userIndex === -1) {
+    // Supabase 需要先发送重置密码邮件，然后用户通过邮件链接重置
+    // 这里我们提供一个简化的重置流程（需要用户已登录）
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      return {
+        success: false,
+        error: '请先登录',
+      };
+    }
+
+    const { error } = await supabase.auth.updateUser({
+      password: password,
+    });
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message || '重置密码失败',
+      };
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('重置密码异常:', error);
     return {
       success: false,
-      error: '用户不存在',
+      error: error.message || '重置密码失败，请稍后重试',
     };
   }
+}
 
-  const updatedUser: User = {
-    ...existingUsers[userIndex],
-    password,
-  };
+/**
+ * 获取当前登录用户
+ */
+export async function getCurrentUser(): Promise<User | null> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
 
-  return {
-    success: true,
-    updatedUser,
-  };
+    if (!user) {
+      return null;
+    }
+
+    // 从 profiles 表加载用户信息
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      username: profile.username,
+      password: '', // 不再存储密码
+      role: profile.role as 'Admin' | 'User' | 'Viewer',
+      avatarColor: profile.avatar_color,
+    };
+  } catch (error) {
+    console.error('获取当前用户失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 登出
+ */
+export async function logoutWithSupabase(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message || '登出失败',
+      };
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('登出异常:', error);
+    return {
+      success: false,
+      error: error.message || '登出失败，请稍后重试',
+    };
+  }
+}
+
+/**
+ * 保存登录状态（现在使用 Supabase session，不需要手动保存）
+ */
+export function saveLoginState(user: User): { success: boolean; error?: string } {
+  // Supabase Auth 会自动管理 session，存储在 localStorage 中
+  // 这里保留接口兼容性，但不做实际操作
+  return { success: true };
+}
+
+/**
+ * 清除登录状态
+ */
+export async function clearLoginState(): Promise<{ success: boolean; error?: string }> {
+  return await logoutWithSupabase();
 }
 
 /**
@@ -245,3 +394,10 @@ export function createResetPasswordLog(user: User): AuditLog {
     timestamp: new Date().toISOString(),
   };
 }
+
+/**
+ * 兼容性函数：保留旧的接口名称
+ */
+export const validateLogin = loginWithSupabase;
+export const validateRegister = registerWithSupabase;
+export const validateResetPassword = resetPasswordWithSupabase;

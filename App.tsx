@@ -18,16 +18,34 @@ import { ReportModal } from './components/Modal/ReportModal';
 import { ImportModal } from './components/Modal/ImportModal';
 import { ToastContainer, type ToastType } from './components/Toast';
 import {
-  validateLogin,
-  validateRegister,
-  validateResetPassword,
+  loginWithSupabase,
+  registerWithSupabase,
+  resetPasswordWithSupabase,
+  getCurrentUser,
+  logoutWithSupabase,
   saveLoginState,
   clearLoginState,
   createLoginLog,
   createRegisterLog,
   createLogoutLog,
   createResetPasswordLog,
+  // 兼容性导出
+  validateLogin,
+  validateRegister,
+  validateResetPassword,
 } from './services/authService';
+import {
+  loadStrategies,
+  saveStrategies,
+  deleteStrategy as deleteStrategyFromSupabase,
+  loadTasks,
+  saveTasks,
+  deleteTask as deleteTaskFromSupabase,
+  loadAuditLogs,
+  saveAuditLog,
+  saveAuditLogs,
+} from './services/supabaseDataService';
+import { supabase } from './services/supabaseClient';
 import {
   STORAGE_KEYS,
   saveToStorage,
@@ -443,114 +461,122 @@ const App: React.FC = () => {
 
   // 注意：数据验证器已移至组件外部（第 275-318 行），避免初始化顺序问题
 
-  // --- Persistence ---
+  // --- Persistence with Supabase ---
   useEffect(() => {
-    // 检查数据版本，如果需要迁移则处理
-    if (needsMigration()) {
-      const currentVersion = getDataVersion();
-      console.warn(`数据版本不匹配：当前 ${currentVersion}，期望 2.0。将使用现有数据。`);
-      // 未来可以在这里添加数据迁移逻辑
-    }
-    
-    // 设置当前数据版本
-    setDataVersion();
+    // 检查当前登录状态（Supabase Auth）
+    const checkAuth = async () => {
+      const user = await getCurrentUser();
+      if (user) {
+        setCurrentUser(user);
+      }
+    };
+    checkAuth();
 
-    // 加载策略数据
-    const strategiesResult = loadFromStorage<StrategyNode[]>(STORAGE_KEYS.STRATEGY, INIT_STRATEGIES, strategyValidator);
-    if (strategiesResult.success && strategiesResult.data) {
-      setStrategies(strategiesResult.data);
-    } else if (strategiesResult.error) {
-      console.error('加载策略数据失败:', strategiesResult.error);
-      setStorageError(`加载策略数据失败: ${strategiesResult.error}`);
-      setStrategies(INIT_STRATEGIES);
-    }
+    // 加载所有数据（从 Supabase）
+    const loadAllData = async () => {
+      try {
+        // 加载策略数据
+        const strategiesData = await loadStrategies();
+        if (strategiesData.length > 0) {
+          setStrategies(strategiesData);
+        } else {
+          // 如果没有数据，使用初始数据
+          setStrategies(INIT_STRATEGIES);
+        }
 
-    // 加载任务数据
-    const tasksResult = loadFromStorage<Task[]>(STORAGE_KEYS.TASKS, INIT_TASKS, taskValidator);
-    if (tasksResult.success && tasksResult.data) {
-      // 数据迁移：确保 reports 数组被正确恢复
-      const migratedTasks = tasksResult.data.map((t: any) => {
-        const reports = Array.isArray(t.reports) ? t.reports : [];
-        return {
-            ...t, 
-          reports: reports,
-            status: t.status || (t.done ? 'completed' : 'todo'),
-            reviewer: t.reviewer || '',
-          score: t.score || undefined,
-          notes: t.notes || '',
-          owner: t.owner || '',
-          product: t.product || '',
-          channel: t.channel || '',
-          priority: t.priority || 'P2',
-          progress: t.progress !== undefined ? t.progress : (t.status === 'completed' || t.status === 'confirmed' ? 100 : 0)
-        };
-      });
-        setTasks(migratedTasks);
-    } else if (tasksResult.error) {
-      console.error('加载任务数据失败:', tasksResult.error);
-      setStorageError(`加载任务数据失败: ${tasksResult.error}`);
-      setTasks(INIT_TASKS);
-    }
+        // 加载任务数据
+        const tasksData = await loadTasks();
+        if (tasksData.length > 0) {
+          setTasks(tasksData);
+        } else {
+          setTasks(INIT_TASKS);
+        }
 
-    // 加载审计日志
-    const logsResult = loadFromStorage<AuditLog[]>(STORAGE_KEYS.LOGS, [], auditLogValidator);
-    if (logsResult.success && logsResult.data) {
-      setAuditLogs(logsResult.data);
-    } else if (logsResult.error) {
-      console.error('加载审计日志失败:', logsResult.error);
-    }
+        // 加载审计日志
+        const logsData = await loadAuditLogs();
+        setAuditLogs(logsData);
 
-    // 加载用户数据
-    const usersResult = loadFromStorage<User[]>(STORAGE_KEYS.USERS_DB, MOCK_USERS, userValidator);
-    if (usersResult.success && usersResult.data) {
-      setUsers(usersResult.data);
-    } else if (usersResult.error) {
-      console.error('加载用户数据失败:', usersResult.error);
-      setUsers(MOCK_USERS);
-    }
+        // 加载用户列表（从 profiles 表）
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('*')
+          .order('created_at', { ascending: true });
 
-    // 加载当前登录用户
-    const userResult = loadFromStorage<User | null>(STORAGE_KEYS.USER, null);
-    if (userResult.success && userResult.data) {
-      setCurrentUser(userResult.data);
-    }
+        if (!profilesError && profiles) {
+          const usersList: User[] = profiles.map((p: any) => ({
+            id: p.id,
+            username: p.username,
+            password: '', // 不再存储密码
+            role: p.role as 'Admin' | 'User' | 'Viewer',
+            avatarColor: p.avatar_color,
+          }));
+          setUsers(usersList);
+        } else if (profilesError) {
+          console.error('加载用户列表失败:', profilesError);
+        }
+      } catch (error) {
+        console.error('加载数据异常:', error);
+        setStorageError('加载数据失败，请刷新页面重试');
+      }
 
-    // 标记为已初始化
-    isInitializedRef.current = true;
+      // 标记为已初始化
+      isInitializedRef.current = true;
+    };
+
+    loadAllData();
   }, []);
 
+  // 保存数据到 Supabase（防抖）
   useEffect(() => {
-    // 只在初始化完成后才保存，避免首次加载时覆盖数据
     if (!isInitializedRef.current) {
       return;
     }
-    
-    const saveData = () => {
-      // 批量保存所有数据（原子操作）
-      const saveResult = saveBatch([
-        { key: STORAGE_KEYS.STRATEGY, data: strategies, validator: strategyValidator },
-        { key: STORAGE_KEYS.TASKS, data: tasks, validator: taskValidator },
-        { key: STORAGE_KEYS.LOGS, data: auditLogs, validator: auditLogValidator },
-        { key: STORAGE_KEYS.USERS_DB, data: users, validator: userValidator }
-      ]);
 
-      if (!saveResult.success) {
-        console.error('数据保存失败:', saveResult.error);
-        setStorageError(`数据保存失败: ${saveResult.error}`);
-        // 3 秒后清除错误提示
-        setTimeout(() => setStorageError(null), 3000);
-      } else {
-        // 保存成功，清除之前的错误提示
+    const saveData = async () => {
+      try {
+        // 保存策略数据
+        const strategiesResult = await saveStrategies(strategies);
+        if (!strategiesResult.success) {
+          console.error('保存策略数据失败:', strategiesResult.error);
+          setStorageError(`保存策略数据失败: ${strategiesResult.error}`);
+          setTimeout(() => setStorageError(null), 3000);
+          return;
+        }
+
+        // 保存任务数据
+        const tasksResult = await saveTasks(tasks);
+        if (!tasksResult.success) {
+          console.error('保存任务数据失败:', tasksResult.error);
+          setStorageError(`保存任务数据失败: ${tasksResult.error}`);
+          setTimeout(() => setStorageError(null), 3000);
+          return;
+        }
+
+        // 保存审计日志（只保存最新的，避免过多）
+        if (auditLogs.length > 0) {
+          const recentLogs = auditLogs.slice(0, 100); // 只保存最近 100 条
+          const logsResult = await saveAuditLogs(recentLogs);
+          if (!logsResult.success) {
+            console.error('保存审计日志失败:', logsResult.error);
+            // 日志保存失败不影响主流程
+          }
+        }
+
+        // 清除错误提示
         if (storageError) {
           setStorageError(null);
         }
+      } catch (error: any) {
+        console.error('保存数据异常:', error);
+        setStorageError(`保存数据失败: ${error.message || '未知错误'}`);
+        setTimeout(() => setStorageError(null), 3000);
       }
     };
-    
-    // 延迟保存，确保状态已更新
-    const timeoutId = setTimeout(saveData, 100);
+
+    // 防抖：1 秒后保存
+    const timeoutId = setTimeout(saveData, 1000);
     return () => clearTimeout(timeoutId);
-  }, [strategies, tasks, auditLogs, users]);
+  }, [strategies, tasks, auditLogs]);
 
   // --- Toast 通知系统 ---
   const showToast = (type: ToastType, message: string) => {
@@ -585,98 +611,131 @@ const App: React.FC = () => {
   };
 
   // --- Auth Actions ---
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const result = validateLogin(loginUsername, loginPassword, users);
+    
+    // 使用 Supabase Auth 登录
+    const result = await loginWithSupabase(loginUsername, loginPassword);
     
     if (result.success && result.user) {
       setCurrentUser(result.user);
       
+      // Supabase Auth 会自动管理 session，不需要手动保存
       const saveResult = saveLoginState(result.user);
       if (!saveResult.success) {
         console.error('保存登录状态失败:', saveResult.error);
         setStorageError(`保存登录状态失败: ${saveResult.error}`);
       }
       
+      // 创建登录日志
       const loginLog = createLoginLog(result.user);
-      loginLog.userId = result.user.id; // 设置 userId
-        setAuditLogs(prev => [loginLog, ...prev]);
+      loginLog.userId = result.user.id;
+      setAuditLogs(prev => [loginLog, ...prev]);
+      
+      // 保存日志到 Supabase
+      await saveAuditLog(loginLog);
 
-        setLoginError('');
-        setLoginUsername('');
-        setLoginPassword('');
+      setLoginError('');
+      setLoginUsername('');
+      setLoginPassword('');
     } else {
       setLoginError(result.error || '登录失败');
     }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    const result = validateRegister(
+    
+    // 使用 Supabase Auth 注册
+    const result = await registerWithSupabase(
       registerData.username,
       registerData.password,
-      registerData.confirmPassword,
-      users
+      registerData.confirmPassword
     );
 
     if (result.success && result.user) {
-      setUsers(prev => [...prev, result.user!]);
+      // 更新用户列表（从 Supabase 重新加载）
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (profiles) {
+        const usersList: User[] = profiles.map((p: any) => ({
+          id: p.id,
+          username: p.username,
+          password: '',
+          role: p.role as 'Admin' | 'User' | 'Viewer',
+          avatarColor: p.avatar_color,
+        }));
+        setUsers(usersList);
+      }
+
       setCurrentUser(result.user);
       
+      // Supabase Auth 会自动管理 session
       const saveResult = saveLoginState(result.user);
       if (!saveResult.success) {
         console.error('保存登录状态失败:', saveResult.error);
         setStorageError(`保存登录状态失败: ${saveResult.error}`);
       }
 
+      // 创建注册日志
       const registerLog = createRegisterLog(result.user);
-      registerLog.userId = result.user.id; // 设置 userId
+      registerLog.userId = result.user.id;
       setAuditLogs(prev => [registerLog, ...prev]);
+      
+      // 保存日志到 Supabase
+      await saveAuditLog(registerLog);
 
-    setRegisterData({ username: '', password: '', confirmPassword: '' });
-    setLoginError('');
+      setRegisterData({ username: '', password: '', confirmPassword: '' });
+      setLoginError('');
     } else {
       setLoginError(result.error || '注册失败');
     }
   };
 
-  const handleResetPassword = (e: React.FormEvent) => {
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    const result = validateResetPassword(
+    
+    // 使用 Supabase Auth 重置密码
+    const result = await resetPasswordWithSupabase(
       registerData.username,
       registerData.password,
-      registerData.confirmPassword,
-      users
+      registerData.confirmPassword
     );
 
-    if (result.success && result.updatedUser) {
-      setUsers(prev => prev.map(u => 
-        u.id === result.updatedUser!.id ? result.updatedUser! : u
-      ));
+    if (result.success) {
+      if (currentUser) {
+        const resetLog = createResetPasswordLog(currentUser);
+        resetLog.userId = currentUser.id;
+        setAuditLogs(prev => [resetLog, ...prev]);
+        await saveAuditLog(resetLog);
+      }
 
-      const resetLog = createResetPasswordLog(result.updatedUser);
-      resetLog.userId = result.updatedUser.id; // 设置 userId
-      setAuditLogs(prev => [resetLog, ...prev]);
-
-    setRegisterData({ username: '', password: '', confirmPassword: '' });
-    setLoginError('');
+      setRegisterData({ username: '', password: '', confirmPassword: '' });
+      setLoginError('');
       setLoginUsername(registerData.username);
-    setAuthMode('login');
-    showToast('success', '密码更新成功，请使用新密码登录');
+      setAuthMode('login');
+      showToast('success', '密码更新成功，请使用新密码登录');
     } else {
       setLoginError(result.error || '重置密码失败');
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (currentUser) {
       const logoutLog = createLogoutLog(currentUser);
-      logoutLog.userId = currentUser.id; // 设置 userId
+      logoutLog.userId = currentUser.id;
       setAuditLogs(prev => [logoutLog, ...prev]);
+      await saveAuditLog(logoutLog);
     }
     
+    // 使用 Supabase Auth 登出
+    await logoutWithSupabase();
+    
     setCurrentUser(null);
-    const clearResult = clearLoginState();
+    const clearResult = await clearLoginState();
     if (!clearResult.success) {
       console.error('清除登录状态失败:', clearResult.error);
     }
@@ -684,7 +743,7 @@ const App: React.FC = () => {
   };
   
   // --- Admin User Management ---
-  const handleAddUser = () => {
+  const handleAddUser = async () => {
     // 获取并清理输入值
     const username = (newUser.username || '').trim();
     const password = (newUser.password || '').trim();
@@ -700,38 +759,75 @@ const App: React.FC = () => {
       return;
     }
     
-    // 检查用户名是否已存在（使用函数式更新获取最新状态）
-    setUsers(prev => {
-      // 检查用户名是否已存在（不区分大小写）
-      if (prev.some(u => u.username.toLowerCase() === username.toLowerCase())) {
-        showToast('error', '用户名已存在');
-        return prev; // 返回原数组，不添加
+    // 检查用户名是否已存在（从 Supabase profiles 表）
+    const { data: existingProfiles } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('username', username)
+      .limit(1);
+    
+    if (existingProfiles && existingProfiles.length > 0) {
+      showToast('error', `用户名 "${username}" 已存在`);
+      return;
+    }
+    
+    try {
+      // 使用 Supabase Auth 创建用户
+      const email = username.includes('@') ? username : `${username}@fotopro.local`;
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (authError || !authData.user) {
+        showToast('error', authError?.message || '创建用户失败');
+        return;
       }
+
+      // 创建 profile 记录
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: authData.user.id,
+          username: username,
+          role: 'User',
+          avatar_color: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
+        });
+
+      if (profileError) {
+        console.error('创建用户信息失败:', profileError);
+        showToast('error', '创建用户信息失败');
+        return;
+      }
+
+      // 重新加载用户列表
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (profiles) {
+        const usersList: User[] = profiles.map((p: any) => ({
+          id: p.id,
+          username: p.username,
+          password: '',
+          role: p.role as 'Admin' | 'User' | 'Viewer',
+          avatarColor: p.avatar_color,
+        }));
+        setUsers(usersList);
+      }
+
+      addLog('CREATE', 'SYSTEM', username, 'Admin manually created user');
+      showToast('success', `用户 "${username}" 创建成功！`);
       
-      // 创建新用户
-    const u: User = {
-        id: generateId('user'),
-        username: username,
-        password: password,
-        role: 'User',
-        avatarColor: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]
-    };
-    
-      // 记录日志
-      addLog('CREATE', 'SYSTEM', u.username, 'Admin manually created user');
-      
-      // 显示成功消息
-      showToast('success', `用户 "${u.username}" 创建成功！`);
-      
-    // PREPEND to the list (so it shows at top), instead of appending
-      return [u, ...prev];
-    });
-    
-    // 重置输入框
-    setNewUser({ username: '', password: '' });
+      setNewUser({ username: '', password: '' });
+    } catch (error: any) {
+      console.error('创建用户异常:', error);
+      showToast('error', `创建用户失败: ${error.message || '未知错误'}`);
+    }
   };
 
-  const handleDeleteUser = (id: string) => {
+  const handleDeleteUser = async (id: string) => {
     if (id === currentUser?.id) {
       showToast('error', '不能删除当前登录的用户');
       return;
@@ -739,11 +835,41 @@ const App: React.FC = () => {
     const u = users.find(user => user.id === id);
     if (!u) return;
     
-    safeConfirm("Delete User", `Are you sure you want to delete user "${u.username}"?`, () => {
-        // 使用函数式更新确保使用最新状态
-        setUsers(prev => prev.filter(user => user.id !== id));
+    safeConfirm("Delete User", `Are you sure you want to delete user "${u.username}"?`, async () => {
+      try {
+        // 从 Supabase 删除用户（会级联删除 profile）
+        const { error } = await supabase.auth.admin.deleteUser(id);
+        
+        if (error) {
+          console.error('删除用户失败:', error);
+          showToast('error', `删除用户失败: ${error.message}`);
+          return;
+        }
+
+        // 重新加载用户列表
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('*')
+          .order('created_at', { ascending: true });
+
+        if (profiles) {
+          const usersList: User[] = profiles.map((p: any) => ({
+            id: p.id,
+            username: p.username,
+            password: '',
+            role: p.role as 'Admin' | 'User' | 'Viewer',
+            avatarColor: p.avatar_color,
+          }));
+          setUsers(usersList);
+        }
+
         setConfirmState(prev => ({...prev, isOpen: false}));
         addLog('DELETE', 'SYSTEM', u.username, 'Admin deleted user');
+        showToast('success', `用户 "${u.username}" 已删除`);
+      } catch (error: any) {
+        console.error('删除用户异常:', error);
+        showToast('error', `删除用户失败: ${error.message || '未知错误'}`);
+      }
     });
   };
 
