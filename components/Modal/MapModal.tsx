@@ -326,7 +326,7 @@ export const MapModal: React.FC<MapModalProps> = ({
     );
   };
 
-  // 可放置区域组件
+  // 可放置区域组件 - 扩大接收区域
   const DroppableArea: React.FC<{ node: StrategyNode; children: React.ReactNode }> = ({
     node,
     children,
@@ -370,17 +370,23 @@ export const MapModal: React.FC<MapModalProps> = ({
     return (
       <div
         ref={setNodeRef}
-        className={`transition-all duration-200 ${
+        className={`relative transition-all duration-200 ${
           isOver && canDrop
-            ? 'ring-4 ring-indigo-500 bg-indigo-100/80 rounded-2xl p-3 scale-105 shadow-lg'
+            ? 'ring-4 ring-indigo-500 bg-indigo-100/80 rounded-2xl scale-105 shadow-lg'
             : isOver
-            ? 'ring-2 ring-rose-400 bg-rose-50/50 rounded-2xl p-2'
+            ? 'ring-2 ring-rose-400 bg-rose-50/50 rounded-2xl'
             : ''
         }`}
+        style={{
+          // 扩大可放置区域：添加 padding 和 margin
+          padding: isOver && canDrop ? '16px' : '8px',
+          margin: '8px 0',
+          minHeight: '120px', // 确保有足够的接收区域
+        }}
       >
         {isOver && canDrop && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
-            <div className="bg-indigo-500 text-white px-4 py-2 rounded-lg shadow-xl font-bold text-sm animate-pulse">
+            <div className="bg-indigo-500 text-white px-6 py-3 rounded-lg shadow-xl font-bold text-base animate-pulse border-2 border-white">
               ✓ 放置到这里
             </div>
           </div>
