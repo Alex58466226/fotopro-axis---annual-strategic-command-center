@@ -227,9 +227,9 @@ export const MapModal: React.FC<MapModalProps> = ({
     
     // 根据 nodeSize 计算节点样式
     const sizeStyles = {
-      small: { padding: 'p-3', textSize: 'text-xs', gap: 'gap-4' },
-      medium: { padding: 'p-4', textSize: 'text-sm', gap: 'gap-6' },
-      large: { padding: 'p-5', textSize: 'text-base', gap: 'gap-8' },
+      small: { padding: 'p-3', textSize: 'text-xs', gap: 'gap-4', titleSize: 'text-sm' },
+      medium: { padding: 'p-4', textSize: 'text-sm', gap: 'gap-6', titleSize: 'text-base' },
+      large: { padding: 'p-5', textSize: 'text-base', gap: 'gap-8', titleSize: 'text-lg' },
     };
     const currentSize = sizeStyles[nodeSize];
 
