@@ -17,6 +17,7 @@ interface HeaderProps {
   };
   onNodeEdit: () => void;
   onReportModalOpen: () => void;
+  onDashboardOpen?: () => void;
   onQuickAction?: (action: 'add-strategy' | 'add-sub-strategy' | 'add-task') => void;
 }
 
@@ -28,6 +29,7 @@ export const Header: React.FC<HeaderProps> = ({
   stats,
   onNodeEdit,
   onReportModalOpen,
+  onDashboardOpen,
   onQuickAction,
 }) => {
   const [showQuickActions, setShowQuickActions] = React.useState(false);
@@ -247,6 +249,20 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
         </div>
+
+        {/* 项目评估按钮 */}
+        {onDashboardOpen && (
+          <button
+            type="button"
+            onClick={onDashboardOpen}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E9E9E7] text-[#37352F] rounded-md text-xs font-medium hover:bg-[#F7F6F3] active:scale-[0.98] transition-all"
+            title="项目评估看板"
+          >
+            <Icon name="barChart" size={15} />
+            <span className="hidden sm:inline">项目评估</span>
+            <span className="sm:hidden">评估</span>
+          </button>
+        )}
 
         {/* 主要操作：智能周报 - Notion 风格按钮 */}
         <button

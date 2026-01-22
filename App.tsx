@@ -15,6 +15,7 @@ import { AuditLogModal } from './components/Modal/AuditLogModal';
 import { StrategyModal } from './components/Modal/StrategyModal';
 import { TaskModal } from './components/Modal/TaskModal';
 import { ReportModal } from './components/Modal/ReportModal';
+import { ProjectDashboardModal } from './components/Modal/ProjectDashboardModal';
 import { ImportModal } from './components/Modal/ImportModal';
 import { ToastContainer, type ToastType } from './components/Toast';
 import {
@@ -421,6 +422,9 @@ const App: React.FC = () => {
   const [reportModal, setReportModal] = useState<{ isOpen: boolean; items: ReportItem[]; isGenerating: boolean }>({
     isOpen: false, items: [], isGenerating: false
   });
+
+  // Dashboard Modal State
+  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
 
   // Resize Ref
   const resizeRef = useRef<{ startY: number, startHeight: number, setter: (h: number) => void } | null>(null);
@@ -1319,6 +1323,7 @@ const App: React.FC = () => {
           stats={stats}
           onNodeEdit={() => openStrategyModal('edit')}
           onReportModalOpen={openReportModal}
+          onDashboardOpen={() => setIsDashboardOpen(true)}
           onQuickAction={(action) => {
             if (action === 'add-strategy') {
               openStrategyModal('create', 1, null);
@@ -1471,6 +1476,15 @@ const App: React.FC = () => {
         onUpdateItem={updateReportItem}
         onDeleteItem={deleteReportItem}
         onCopyToClipboard={copyReportToClipboard}
+      />
+
+      <ProjectDashboardModal
+        isOpen={isDashboardOpen}
+        activeNode={activeNode}
+        strategies={strategies}
+        tasks={tasks}
+        activeBranchIds={activeBranchIds}
+        onClose={() => setIsDashboardOpen(false)}
       />
 
       <ToastContainer toasts={toasts} onClose={removeToast} />
