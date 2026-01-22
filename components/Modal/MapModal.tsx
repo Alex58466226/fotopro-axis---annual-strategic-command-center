@@ -58,7 +58,7 @@ export const MapModal: React.FC<MapModalProps> = ({
   if (!isOpen) return null;
 
   const renderLargeMapTask = (t: Task) => (
-    <div key={t.id} className="relative pl-8 mb-2">
+    <div key={t.id} className="relative pl-8 mb-1.5">
       <div className="absolute left-0 top-0 bottom-0 w-px bg-slate-200" />
       <div className="absolute left-0 top-3 w-6 h-px bg-slate-200" />
       <div
