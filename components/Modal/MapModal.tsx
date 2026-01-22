@@ -223,7 +223,7 @@ export const MapModal: React.FC<MapModalProps> = ({
       <div
         ref={setNodeRef}
         style={style}
-        className={`relative pl-8 mb-4 ${isDragging ? 'opacity-50' : ''}`}
+        className={`relative pl-8 mb-6 ${isDragging ? 'opacity-50' : ''}`}
       >
         <div className="absolute left-0 top-0 bottom-0 w-px bg-slate-300" />
         {node.parentId && <div className="absolute left-0 top-6 w-6 h-px bg-slate-300" />}
@@ -313,7 +313,7 @@ export const MapModal: React.FC<MapModalProps> = ({
           </div>
         </div>
         {isExpanded && hasChildren && (
-          <div className="mt-2 ml-2">
+          <div className="mt-4 ml-2 space-y-2">
             {childStrategies.map(child => (
               <DroppableArea key={child.id} node={child}>
                 <DraggableStrategyNode node={child} />
@@ -435,7 +435,7 @@ export const MapModal: React.FC<MapModalProps> = ({
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            <div className="max-w-5xl mx-auto">
+            <div className="max-w-5xl mx-auto" style={{ minHeight: '100%' }}>
               {strategies.filter(s => s.level === 1).map(renderLargeMapNode)}
             </div>
             <DragOverlay>
