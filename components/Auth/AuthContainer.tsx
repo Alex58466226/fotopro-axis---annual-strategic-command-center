@@ -81,7 +81,7 @@ export const AuthContainer: React.FC<AuthContainerProps> = ({
             <Icon name="layers" size={24} />
           </div>
           <h1 className="text-xl font-black uppercase tracking-widest">
-            Fotopro Axis
+            Fotopro AMZ 项目管理器
           </h1>
           <p className="text-[10px] text-slate-400 font-bold uppercase">
             Authorized Personnel Only

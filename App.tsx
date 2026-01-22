@@ -1421,7 +1421,7 @@ const App: React.FC = () => {
             onTasksReorder={handleTasksReorder}
             onFullscreen={() => setFullscreenMode('tasklist')}
           />
-          <footer className="text-center text-[9px] text-slate-300 font-medium py-4">FOTOPRO AXIS STRATEGIC SYSTEM v2.4 · BUILD {TODAY_STR.replace(/-/g, '')}</footer>
+          <footer className="text-center text-[9px] text-slate-300 font-medium py-4">Fotopro AMZ 项目管理器 v2.5 · BUILD {TODAY_STR.replace(/-/g, '')}</footer>
         </div>
       </main>
       

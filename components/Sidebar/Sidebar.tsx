@@ -64,7 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div>
               <h1 className="text-sm font-semibold text-[#37352F]">
-                Fotopro Axis
+                Fotopro AMZ 项目管理器
               </h1>
               <p className="text-[10px] font-normal text-[#787774]">v2.4 安全版</p>
             </div>
