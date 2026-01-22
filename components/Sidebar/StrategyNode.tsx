@@ -42,17 +42,17 @@ export const StrategyNodeComponent: React.FC<StrategyNodeComponentProps> = ({
         )}
         <div
           onClick={onNodeClick}
-          className={`group relative p-2 my-1 ml-1 rounded-lg cursor-pointer transition-all border ${
+          className={`group relative p-2 my-0.5 ml-1 rounded-lg cursor-pointer transition-all border ${
             isSelected
               ? 'bg-slate-900 border-slate-900 shadow-md'
               : 'bg-white border-slate-100 hover:border-orange-300'
           }`}
         >
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between mb-0.5">
+            <div className="flex items-center gap-1.5">
               {/* 层级标签：悬停时显示，完全次要信息 */}
               <span
-                className={`text-[7px] font-normal opacity-0 group-hover:opacity-30 transition-opacity duration-200 px-1 ${
+                className={`text-[7px] font-normal opacity-0 group-hover:opacity-30 transition-opacity duration-200 ${
                   isSelected ? 'text-slate-400' : 'text-slate-300'
                 }`}
               >

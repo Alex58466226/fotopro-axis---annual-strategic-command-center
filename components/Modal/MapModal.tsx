@@ -237,7 +237,7 @@ export const MapModal: React.FC<MapModalProps> = ({
       <div
         ref={setNodeRef}
         style={style}
-        className={`relative pl-8 mb-6 ${isDragging ? 'opacity-50' : ''}`}
+        className={`relative pl-8 mb-4 ${isDragging ? 'opacity-50' : ''}`}
       >
         <div className="absolute left-0 top-0 bottom-0 w-px bg-slate-300" />
         {node.parentId && <div className="absolute left-0 top-6 w-6 h-px bg-slate-300" />}
@@ -272,8 +272,8 @@ export const MapModal: React.FC<MapModalProps> = ({
             {...(canDrag ? { ...attributes, ...listeners } : {})}
           >
             {/* 标签移到标题下方，更核心的位置 */}
-            <div className="flex justify-between items-start mb-2">
-              <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex justify-between items-start mb-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {/* 层级标签：悬停时显示，完全次要信息 */}
                 <span
                   className={`text-[7px] font-normal text-slate-300 opacity-0 group-hover:opacity-40 transition-opacity duration-200 ${
@@ -312,7 +312,7 @@ export const MapModal: React.FC<MapModalProps> = ({
                 </div>
               )}
             </div>
-            <h4 className={`${currentSize.textSize} font-black text-slate-800 mb-2`}>{node.name}</h4>
+            <h4 className={`${currentSize.textSize} font-black text-slate-800 mb-1.5`}>{node.name}</h4>
             <div className={`flex items-center ${currentSize.gap} text-[10px] text-slate-500 font-medium pt-2 border-t border-slate-50`}>
               <span className="flex items-center gap-1">
                 <Icon name="user" size={12} /> {node.owner || 'Unassigned'}
