@@ -16,6 +16,7 @@ import { StrategyModal } from './components/Modal/StrategyModal';
 import { TaskModal } from './components/Modal/TaskModal';
 import { ReportModal } from './components/Modal/ReportModal';
 import { ProjectDashboardModal } from './components/Modal/ProjectDashboardModal';
+import { FullscreenModal } from './components/Modal/FullscreenModal';
 import { ImportModal } from './components/Modal/ImportModal';
 import { ToastContainer, type ToastType } from './components/Toast';
 import {
@@ -425,6 +426,9 @@ const App: React.FC = () => {
 
   // Dashboard Modal State
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+
+  // Fullscreen Modal States
+  const [fullscreenMode, setFullscreenMode] = useState<'gantt' | 'filter' | 'tasklist' | null>(null);
 
   // Resize Ref
   const resizeRef = useRef<{ startY: number, startHeight: number, setter: (h: number) => void } | null>(null);
@@ -995,6 +999,15 @@ const App: React.FC = () => {
     } else {
       if (!id) return;
       setStrategies(prev => prev.map(s => s.id === id ? { ...s, name: name!, parentId: parentId || null, owner: owner || '', group: group || '', channel: channel || '', product: product || '', tags: tagsArray, metrics: cleanMetrics, start: start!, end: end! } : s)); addLog('UPDATE', 'STRATEGY', name!, 'Updated strategy details');
+  
+  // 更新策略（用于拖拽等操作）
+  const updateStrategy = (id: string, updates: Partial<StrategyNode>) => {
+    setStrategies(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+    const strategy = strategies.find(s => s.id === id);
+    if (strategy) {
+      addLog('UPDATE', 'STRATEGY', strategy.name, `Updated strategy: ${Object.keys(updates).join(', ')}`);
+    }
+  };
     }
     setModal({ ...modal, isOpen: false });
   };
@@ -1385,6 +1398,7 @@ const App: React.FC = () => {
             onScaleChange={delta => setGanttScale(prev => Math.max(2, Math.min(20, prev + delta)))}
             onHeightResize={(e, currentHeight) => startResize(e, setGanttHeight, currentHeight)}
             onTaskUpdate={updateTask}
+            onFullscreen={() => setFullscreenMode('gantt')}
           />
 
           <TaskList
@@ -1405,6 +1419,7 @@ const App: React.FC = () => {
             suggestions={taskSuggestions}
             onLoadSuggestions={loadTaskSuggestions}
             onTasksReorder={handleTasksReorder}
+            onFullscreen={() => setFullscreenMode('tasklist')}
           />
           <footer className="text-center text-[9px] text-slate-300 font-medium py-4">FOTOPRO AXIS STRATEGIC SYSTEM v2.4 · BUILD {TODAY_STR.replace(/-/g, '')}</footer>
         </div>
@@ -1504,6 +1519,80 @@ const App: React.FC = () => {
         activeBranchIds={activeBranchIds}
         onClose={() => setIsDashboardOpen(false)}
       />
+
+      {/* 全屏模态框 */}
+      <FullscreenModal
+        isOpen={fullscreenMode === 'gantt'}
+        title="时间作战地图 (Gantt)"
+        onClose={() => setFullscreenMode(null)}
+      >
+        <GanttChart
+          isCollapsed={false}
+          height={window.innerHeight - 200}
+          scale={ganttScale}
+          tasks={activeTasks}
+          strategies={filteredStrategies}
+          activeBranchIds={activeBranchIds}
+          onToggleCollapse={() => {}}
+          onScaleChange={delta => setGanttScale(prev => Math.max(2, Math.min(20, prev + delta)))}
+          onHeightResize={() => {}}
+          onTaskUpdate={updateTask}
+        />
+      </FullscreenModal>
+
+      <FullscreenModal
+        isOpen={fullscreenMode === 'filter'}
+        title="项目透视 · 快速预览卡片"
+        onClose={() => setFullscreenMode(null)}
+      >
+        <FilterPanel
+          isCollapsed={false}
+          isFilterActive={isFilterActive}
+          filters={filters}
+          filterOptions={filterOptions}
+          filteredStrategies={filteredStrategies}
+          onToggleCollapse={() => {}}
+          onFilterChange={setFilters}
+          onClearFilters={() =>
+            setFilters({
+              owner: 'all',
+              channel: 'all',
+              product: 'all',
+              tag: 'all',
+              time: 'all',
+              customStartDate: undefined,
+              customEndDate: undefined,
+            })
+          }
+          onStrategyClick={setActiveNodeId}
+        />
+      </FullscreenModal>
+
+      <FullscreenModal
+        isOpen={fullscreenMode === 'tasklist'}
+        title="执行清单 (Execution List)"
+        onClose={() => setFullscreenMode(null)}
+      >
+        <TaskList
+          isCollapsed={false}
+          height={window.innerHeight - 200}
+          tasks={activeTasks}
+          isFilterActive={isFilterActive}
+          isAiLoading={isAiLoading}
+          canUseAI={activeNode.level === 3}
+          onToggleCollapse={() => {}}
+          onHeightResize={() => {}}
+          onTaskUpdate={updateTask}
+          onTaskEdit={openTaskEdit}
+          onTaskDelete={deleteTask}
+          onAddTask={addTask}
+          onAiAssist={handleAiAssist}
+          onSelectSuggestion={handleSelectSuggestion}
+          suggestions={taskSuggestions}
+          onLoadSuggestions={loadTaskSuggestions}
+          onTasksReorder={handleTasksReorder}
+        />
+      </FullscreenModal>
 
       <ToastContainer toasts={toasts} onClose={removeToast} />
 

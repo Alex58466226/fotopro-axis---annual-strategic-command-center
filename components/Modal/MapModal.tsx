@@ -1,6 +1,21 @@
 import React from 'react';
 import Icon from '../Icon';
 import { StrategyNode, Task, TaskStatus } from '../../types';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+} from '@dnd-kit/core';
+import {
+  useDraggable,
+  useDroppable,
+} from '@dnd-kit/core';
 
 const STATUS_CONFIG: Record<TaskStatus, { icon: string }> = {
   'todo': { icon: 'bg-slate-300' },
@@ -19,6 +34,7 @@ interface MapModalProps {
   onNodeClick: (nodeId: string) => void;
   onTaskClick: (e: React.MouseEvent, task: Task) => void;
   onToggleExpand: (e: React.MouseEvent, nodeId: string) => void;
+  onStrategyUpdate?: (id: string, updates: Partial<StrategyNode>) => void; // 新增：策略更新回调（用于拖拽）
 }
 
 /**
@@ -34,6 +50,7 @@ export const MapModal: React.FC<MapModalProps> = ({
   onNodeClick,
   onTaskClick,
   onToggleExpand,
+  onStrategyUpdate,
 }) => {
   if (!isOpen) return null;
 
@@ -70,14 +87,89 @@ export const MapModal: React.FC<MapModalProps> = ({
     </div>
   );
 
-  const renderLargeMapNode = (node: StrategyNode): React.ReactNode => {
+  // 拖拽状态
+  const [activeId, setActiveId] = React.useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor)
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (!over || !onStrategyUpdate) return;
+
+    const draggedStrategy = strategies.find(s => s.id === active.id);
+    const targetStrategy = strategies.find(s => s.id === over.id);
+
+    if (!draggedStrategy) return;
+
+    // 只允许拖拽 L2-L3 策略节点
+    if (draggedStrategy.level < 2 || draggedStrategy.level > 3) return;
+
+    // 不能拖拽到自己
+    if (active.id === over.id) return;
+
+    // 不能拖拽到自己的子节点
+    const isDescendant = (parentId: string, childId: string): boolean => {
+      const children = strategies.filter(s => s.parentId === parentId);
+      if (children.some(c => c.id === childId)) return true;
+      return children.some(c => isDescendant(c.id, childId));
+    };
+    if (isDescendant(draggedStrategy.id, over.id as string)) return;
+
+    // 确定新的 parentId
+    let newParentId: string | null = null;
+    if (targetStrategy) {
+      // 如果拖拽到策略节点上，根据目标节点的层级决定
+      if (targetStrategy.level < draggedStrategy.level) {
+        // 可以成为目标节点的子节点
+        newParentId = targetStrategy.id;
+      } else if (targetStrategy.parentId) {
+        // 成为目标节点的兄弟节点
+        newParentId = targetStrategy.parentId;
+      }
+    }
+
+    if (newParentId !== null && newParentId !== draggedStrategy.parentId) {
+      onStrategyUpdate(draggedStrategy.id, { parentId: newParentId });
+    }
+  };
+
+  // 可拖拽的策略节点组件
+  const DraggableStrategyNode: React.FC<{ node: StrategyNode }> = ({ node }) => {
+    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+      id: node.id,
+      disabled: node.level < 2 || node.level > 3, // 只允许拖拽 L2-L3
+    });
+
+    const style = transform
+      ? {
+          transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        }
+      : undefined;
+
     const childStrategies = strategies.filter(s => s.parentId === node.id);
     const childTasks = tasks.filter(t => t.parentId === node.id);
     const hasChildren = childStrategies.length > 0 || childTasks.length > 0;
     const isExpanded = expandedNodes.has(node.id);
+    const canDrag = node.level >= 2 && node.level <= 3;
 
     return (
-      <div key={node.id} className="relative pl-8 mb-4">
+      <div
+        ref={setNodeRef}
+        style={style}
+        className={`relative pl-8 mb-4 ${isDragging ? 'opacity-50' : ''}`}
+      >
         <div className="absolute left-0 top-0 bottom-0 w-px bg-slate-300" />
         {node.parentId && <div className="absolute left-0 top-6 w-6 h-px bg-slate-300" />}
         <div className="relative">
@@ -97,9 +189,15 @@ export const MapModal: React.FC<MapModalProps> = ({
               activeNodeId === node.id
                 ? 'border-slate-900 ring-2 ring-slate-100'
                 : 'border-slate-200 hover:border-indigo-300'
-            }`}
+            } $            ${canDrag ? 'cursor-move' : 'cursor-pointer'}`}
             onClick={() => onNodeClick(node.id)}
+            {...(canDrag ? { ...attributes, ...listeners } : {})}
           >
+            {canDrag && (
+              <div className="absolute top-2 right-2 text-[8px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded">
+                可拖拽
+              </div>
+            )}
             <div className="flex justify-between items-start mb-2">
               <div className="flex items-center gap-2">
                 <span
@@ -152,11 +250,40 @@ export const MapModal: React.FC<MapModalProps> = ({
         </div>
         {isExpanded && hasChildren && (
           <div className="mt-2 ml-2">
-            {childStrategies.map(renderLargeMapNode)}
+            {childStrategies.map(child => (
+              <DraggableStrategyNode key={child.id} node={child} />
+            ))}
             {childTasks.map(renderLargeMapTask)}
           </div>
         )}
       </div>
+    );
+  };
+
+  // 可放置区域组件
+  const DroppableArea: React.FC<{ node: StrategyNode; children: React.ReactNode }> = ({
+    node,
+    children,
+  }) => {
+    const { setNodeRef, isOver } = useDroppable({
+      id: node.id,
+    });
+
+    return (
+      <div
+        ref={setNodeRef}
+        className={`${isOver ? 'ring-2 ring-indigo-500 bg-indigo-50/50 rounded-2xl p-2' : ''}`}
+      >
+        {children}
+      </div>
+    );
+  };
+
+  const renderLargeMapNode = (node: StrategyNode): React.ReactNode => {
+    return (
+      <DroppableArea key={node.id} node={node}>
+        <DraggableStrategyNode node={node} />
+      </DroppableArea>
     );
   };
 
@@ -185,9 +312,25 @@ export const MapModal: React.FC<MapModalProps> = ({
           </button>
         </div>
         <div className="flex-1 overflow-auto p-12 custom-scrollbar bg-slate-50">
-          <div className="max-w-5xl mx-auto">
-            {strategies.filter(s => s.level === 1).map(renderLargeMapNode)}
-          </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="max-w-5xl mx-auto">
+              {strategies.filter(s => s.level === 1).map(renderLargeMapNode)}
+            </div>
+            <DragOverlay>
+              {activeId ? (
+                <div className="p-4 bg-white border-2 border-indigo-500 rounded-2xl shadow-xl opacity-90">
+                  <div className="text-sm font-black text-slate-800">
+                    {strategies.find(s => s.id === activeId)?.name || ''}
+                  </div>
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
         </div>
       </div>
     </div>

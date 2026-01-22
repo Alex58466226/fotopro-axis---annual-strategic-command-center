@@ -29,6 +29,7 @@ interface FilterPanelProps {
   onFilterChange: (filters: Filters) => void;
   onClearFilters: () => void;
   onStrategyClick: (strategyId: string) => void;
+  onFullscreen?: () => void; // 新增：全屏回调
 }
 
 /**
@@ -44,6 +45,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
   onFilterChange,
   onClearFilters,
   onStrategyClick,
+  onFullscreen,
 }) => {
   return (
     <section
@@ -68,22 +70,37 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
             <Icon name="down" size={12} />
           </div>
         </div>
-        {isFilterActive && (
-          <div
-            className="flex items-center gap-3 animate-fade-in"
-            onClick={e => e.stopPropagation()}
-          >
-            <span className="text-[10px] font-medium text-[#2383E2] bg-[#E3F2FD] px-2.5 py-1 rounded-md">
-              筛选中
-            </span>
+        <div
+          className="flex items-center gap-3"
+          onClick={e => e.stopPropagation()}
+        >
+          {isFilterActive && (
+            <>
+              <span className="text-[10px] font-medium text-[#2383E2] bg-[#E3F2FD] px-2.5 py-1 rounded-md">
+                筛选中
+              </span>
+              <button
+                onClick={onClearFilters}
+                className="text-[10px] font-medium text-[#787774] hover:text-[#E16259] transition-colors"
+              >
+                清除
+              </button>
+            </>
+          )}
+          {!isCollapsed && onFullscreen && (
             <button
-              onClick={onClearFilters}
-              className="text-[10px] font-medium text-[#787774] hover:text-[#E16259] transition-colors"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onFullscreen();
+              }}
+              className="p-1.5 bg-[#F7F6F3] rounded-md hover:bg-[#E9E9E7] transition-colors"
+              title="全屏显示"
             >
-              清除
+              <Icon name="maximize" size={14} className="text-[#787774]" />
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       {!isCollapsed && (
         <div className="animate-in fade-in slide-in-from-top-2 duration-300">

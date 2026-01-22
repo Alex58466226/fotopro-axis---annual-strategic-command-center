@@ -25,6 +25,7 @@ interface GanttChartProps {
   onScaleChange: (delta: number) => void;
   onHeightResize: (e: React.MouseEvent, currentHeight: number) => void;
   onTaskUpdate?: (id: string, updates: Partial<Task>) => void; // 新增：任务更新回调
+  onFullscreen?: () => void; // 新增：全屏回调
 }
 
 /**
@@ -41,6 +42,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   onScaleChange,
   onHeightResize,
   onTaskUpdate,
+  onFullscreen,
 }) => {
   // 滚动容器引用
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -316,30 +318,45 @@ export const GanttChart: React.FC<GanttChartProps> = ({
         </h3>
         <div className="flex items-center gap-2">
           {!isCollapsed && (
-            <div className="flex gap-2 mr-2">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onScaleChange(-2);
-                }}
-                className="p-1.5 bg-[#F7F6F3] rounded-md hover:bg-[#E9E9E7] transition-colors"
-                title="缩小"
-              >
-                <Icon name="down" size={12} />
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onScaleChange(2);
-                }}
-                className="p-1.5 bg-[#F7F6F3] rounded-md hover:bg-[#E9E9E7] rotate-180 transition-colors"
-                title="放大"
-              >
-                <Icon name="down" size={12} />
-              </button>
-            </div>
+            <>
+              <div className="flex gap-2 mr-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onScaleChange(-2);
+                  }}
+                  className="p-1.5 bg-[#F7F6F3] rounded-md hover:bg-[#E9E9E7] transition-colors"
+                  title="缩小"
+                >
+                  <Icon name="down" size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onScaleChange(2);
+                  }}
+                  className="p-1.5 bg-[#F7F6F3] rounded-md hover:bg-[#E9E9E7] rotate-180 transition-colors"
+                  title="放大"
+                >
+                  <Icon name="down" size={12} />
+                </button>
+              </div>
+              {onFullscreen && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onFullscreen();
+                  }}
+                  className="p-1.5 bg-[#F7F6F3] rounded-md hover:bg-[#E9E9E7] transition-colors"
+                  title="全屏显示"
+                >
+                  <Icon name="maximize" size={14} className="text-[#787774]" />
+                </button>
+              )}
+            </>
           )}
           <button
             type="button"

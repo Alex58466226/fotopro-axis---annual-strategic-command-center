@@ -42,6 +42,7 @@ interface TaskListProps {
   suggestions: TaskSuggestion[];
   onLoadSuggestions: () => void;
   onTasksReorder?: (tasks: Task[]) => void; // 新增：拖拽排序回调
+  onFullscreen?: () => void; // 新增：全屏回调
 }
 
 export const STATUS_CONFIG: Record<TaskStatus, { label: string; color: string; bg: string; icon: string }> = {
@@ -87,6 +88,7 @@ export const TaskList: React.FC<TaskListProps> = ({
   suggestions,
   onLoadSuggestions,
   onTasksReorder,
+  onFullscreen,
 }) => {
   const [showSuggestions, setShowSuggestions] = React.useState(false);
   const suggestionsRef = React.useRef<HTMLDivElement>(null);
@@ -275,6 +277,19 @@ export const TaskList: React.FC<TaskListProps> = ({
                 </div>
               )}
             </div>
+          )}
+          {!isCollapsed && onFullscreen && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onFullscreen();
+              }}
+              className="p-1.5 bg-[#F7F6F3] rounded-md hover:bg-[#E9E9E7] transition-colors"
+              title="全屏显示"
+            >
+              <Icon name="maximize" size={14} className="text-[#787774]" />
+            </button>
           )}
           <div
             className={`p-1 rounded-full text-slate-300 group-hover:bg-slate-100 transition-all ${
