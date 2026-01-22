@@ -572,10 +572,11 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                           className="absolute left-0 truncate text-[11px] pr-2 text-right flex items-center gap-1.5"
                           style={{ width: `${120 + indent}px`, paddingLeft: `${indent}px` }}
                         >
-                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${
+                          {/* 层级标签移到不显眼的位置（鼠标悬停时显示） */}
+                          <span className={`text-[8px] font-normal text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity ${
                             item.type === 'strategy' 
-                              ? 'bg-indigo-50 text-indigo-700 border-indigo-200' 
-                              : 'bg-slate-50 text-slate-600 border-slate-200'
+                              ? 'text-indigo-300' 
+                              : 'text-slate-300'
                           }`}>
                             L{item.level}
                           </span>

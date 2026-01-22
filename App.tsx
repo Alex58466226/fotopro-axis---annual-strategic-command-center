@@ -1448,6 +1448,7 @@ const App: React.FC = () => {
             }
           }
         }}
+        isFullscreen={false}
       />
 
       <UserManagementModal

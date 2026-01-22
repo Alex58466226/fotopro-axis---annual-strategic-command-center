@@ -53,6 +53,7 @@ export const MapModal: React.FC<MapModalProps> = ({
   onToggleExpand,
   onStrategyUpdate,
   onDragSuccess,
+  isFullscreen = false,
 }) => {
   if (!isOpen) return null;
 
@@ -91,6 +92,11 @@ export const MapModal: React.FC<MapModalProps> = ({
 
   // 拖拽状态
   const [activeId, setActiveId] = React.useState<string | null>(null);
+  
+  // 缩放状态（全屏模式下）
+  const [zoomLevel, setZoomLevel] = React.useState(1);
+  const [nodeSize, setNodeSize] = React.useState<'small' | 'medium' | 'large'>('medium');
+  
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -218,6 +224,14 @@ export const MapModal: React.FC<MapModalProps> = ({
     const childTasks = tasks.filter(t => t.parentId === node.id);
     const hasChildren = childStrategies.length > 0 || childTasks.length > 0;
     const isExpanded = expandedNodes.has(node.id);
+    
+    // 根据 nodeSize 计算节点样式
+    const sizeStyles = {
+      small: { padding: 'p-3', textSize: 'text-xs', gap: 'gap-4' },
+      medium: { padding: 'p-4', textSize: 'text-sm', gap: 'gap-6' },
+      large: { padding: 'p-5', textSize: 'text-base', gap: 'gap-8' },
+    };
+    const currentSize = sizeStyles[nodeSize];
 
     return (
       <div
@@ -240,7 +254,7 @@ export const MapModal: React.FC<MapModalProps> = ({
             <div className="absolute -left-[3px] top-[22px] w-1.5 h-1.5 bg-slate-300 rounded-full" />
           )}
           <div
-            className={`p-4 bg-white border rounded-2xl transition-all shadow-sm hover:shadow-md ${
+            className={`${currentSize.padding} bg-white border rounded-2xl transition-all shadow-sm hover:shadow-md ${
               activeNodeId === node.id
                 ? 'border-slate-900 ring-2 ring-slate-100'
                 : 'border-slate-200 hover:border-indigo-300'
@@ -257,43 +271,49 @@ export const MapModal: React.FC<MapModalProps> = ({
             }}
             {...(canDrag ? { ...attributes, ...listeners } : {})}
           >
-            {canDrag && (
-              <div className="absolute top-2 right-2 text-[9px] text-indigo-600 bg-indigo-100 border border-indigo-300 px-2 py-1 rounded-md font-bold shadow-sm animate-pulse">
-                ✨ 可拖拽
-              </div>
-            )}
+            {/* 标签移到标题下方，更核心的位置 */}
             <div className="flex justify-between items-start mb-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* 层级标签移到不显眼位置 */}
                 <span
-                  className={`text-[10px] font-black px-2 py-0.5 rounded text-white ${
+                  className={`text-[8px] font-normal text-slate-300 opacity-60 ${
                     node.level === 1
-                      ? 'bg-slate-800'
+                      ? 'text-slate-400'
                       : node.level === 2
-                      ? 'bg-indigo-600'
-                      : 'bg-orange-500'
+                      ? 'text-indigo-300'
+                      : 'text-orange-300'
                   }`}
                 >
                   L{node.level}
                 </span>
                 {node.group && (
-                  <span className="text-[9px] font-black uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
+                  <span className="text-[9px] font-bold uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
                     {node.group}
                   </span>
                 )}
+                {/* 标签移到更核心位置 */}
+                {node.tags && node.tags.length > 0 && (
+                  <div className="flex gap-1.5 flex-wrap">
+                    {node.tags.map(t => (
+                      <span
+                        key={t}
+                        className="text-[9px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md"
+                      >
+                        #{t}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="flex gap-2">
-                {node.tags?.map(t => (
-                  <span
-                    key={t}
-                    className="text-[9px] text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded"
-                  >
-                    #{t}
-                  </span>
-                ))}
-              </div>
+              {/* 可拖拽标识移到右上角，不重叠 */}
+              {canDrag && (
+                <div className="text-[8px] text-indigo-500 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded font-medium flex-shrink-0">
+                  ✨
+                </div>
+              )}
             </div>
-            <h4 className="text-sm font-black text-slate-800 mb-2">{node.name}</h4>
-            <div className="flex items-center gap-6 text-[10px] text-slate-500 font-medium pt-2 border-t border-slate-50">
+            <h4 className={`${currentSize.textSize} font-black text-slate-800 mb-2`}>{node.name}</h4>
+            <div className={`flex items-center ${currentSize.gap} text-[10px] text-slate-500 font-medium pt-2 border-t border-slate-50`}>
               <span className="flex items-center gap-1">
                 <Icon name="user" size={12} /> {node.owner || 'Unassigned'}
               </span>
@@ -421,12 +441,72 @@ export const MapModal: React.FC<MapModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-4 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-500 transition-all transform hover:rotate-90"
-          >
-            <Icon name="plus" size={24} className="rotate-45" />
-          </button>
+          <div className="flex items-center gap-3">
+            {/* 全屏模式下的缩放控制 */}
+            {isFullscreen && (
+              <>
+                <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1">
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(prev => Math.max(0.5, prev - 0.1))}
+                    className="p-1.5 hover:bg-white rounded transition-colors"
+                    title="缩小"
+                  >
+                    <Icon name="down" size={14} className="text-slate-600" />
+                  </button>
+                  <span className="text-xs font-medium text-slate-600 px-2 min-w-[3rem] text-center">
+                    {Math.round(zoomLevel * 100)}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(prev => Math.min(2, prev + 0.1))}
+                    className="p-1.5 hover:bg-white rounded transition-colors rotate-180"
+                    title="放大"
+                  >
+                    <Icon name="down" size={14} className="text-slate-600" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1">
+                  <button
+                    type="button"
+                    onClick={() => setNodeSize('small')}
+                    className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                      nodeSize === 'small' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+                    }`}
+                    title="小尺寸"
+                  >
+                    小
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNodeSize('medium')}
+                    className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                      nodeSize === 'medium' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+                    }`}
+                    title="中尺寸"
+                  >
+                    中
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNodeSize('large')}
+                    className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                      nodeSize === 'large' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+                    }`}
+                    title="大尺寸"
+                  >
+                    大
+                  </button>
+                </div>
+              </>
+            )}
+            <button
+              onClick={onClose}
+              className="p-4 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-500 transition-all transform hover:rotate-90"
+            >
+              <Icon name="plus" size={24} className="rotate-45" />
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-auto p-12 custom-scrollbar bg-slate-50">
           <DndContext
@@ -435,7 +515,16 @@ export const MapModal: React.FC<MapModalProps> = ({
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
           >
-            <div className="max-w-5xl mx-auto" style={{ minHeight: '100%' }}>
+            <div 
+              className="mx-auto" 
+              style={{ 
+                minHeight: '100%',
+                maxWidth: isFullscreen ? '100%' : '80rem',
+                transform: `scale(${zoomLevel})`,
+                transformOrigin: 'top center',
+                transition: 'transform 0.2s ease',
+              }}
+            >
               {strategies.filter(s => s.level === 1).map(renderLargeMapNode)}
             </div>
             <DragOverlay>
