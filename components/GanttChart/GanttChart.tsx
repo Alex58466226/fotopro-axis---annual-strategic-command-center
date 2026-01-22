@@ -265,33 +265,72 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     return marks;
   }, [scale]);
 
-  // 每日日期刻度线数据
+  // 每日日期刻度线数据 - 优化显示逻辑
   const dayMarks = React.useMemo(() => {
     const start = new Date(PROJECT_START);
     const end = new Date(PROJECT_END);
-    const marks: { date: Date; offset: number; label: string; dayOfMonth: number }[] = [];
+    const marks: { date: Date; offset: number; label: string; dayOfMonth: number; isWeekStart: boolean }[] = [];
     
-    // 根据 scale 决定显示间隔
-    // scale 越大，可以显示更密集的日期
-    const dayInterval = scale >= 10 ? 1 : scale >= 5 ? 3 : scale >= 2 ? 7 : 14; // 每天/每3天/每周/每两周
+    // 根据 scale 决定显示间隔和策略
+    // scale >= 10: 显示每天
+    // scale >= 5: 显示每周和月初
+    // scale >= 2: 只显示月初和月中
+    // scale < 2: 只显示月初
     
     let current = new Date(start);
     while (current <= end) {
       const dateStr = current.toISOString().split('T')[0];
       const offset = getDayOffset(dateStr, scale);
       const dayOfMonth = current.getDate();
+      const dayOfWeek = current.getDay(); // 0 = Sunday, 1 = Monday, ...
+      const isWeekStart = dayOfWeek === 1; // 周一
+      const isMonthStart = dayOfMonth === 1;
+      const isMonthMiddle = dayOfMonth === 15;
       
-      // 只在月初或间隔日期显示
-      const shouldShow = dayOfMonth === 1 || (dayOfMonth % dayInterval === 0);
+      let shouldShow = false;
+      let label = '';
+      
+      if (scale >= 10) {
+        // 显示每天，但月初和周一更明显
+        shouldShow = true;
+        if (isMonthStart) {
+          label = `${current.getMonth() + 1}/${dayOfMonth}`;
+        } else if (isWeekStart) {
+          label = String(dayOfMonth);
+        } else {
+          label = String(dayOfMonth);
+        }
+      } else if (scale >= 5) {
+        // 显示每周和月初
+        shouldShow = isMonthStart || isWeekStart;
+        if (isMonthStart) {
+          label = `${current.getMonth() + 1}/${dayOfMonth}`;
+        } else if (isWeekStart) {
+          label = String(dayOfMonth);
+        }
+      } else if (scale >= 2) {
+        // 只显示月初和月中
+        shouldShow = isMonthStart || isMonthMiddle;
+        if (isMonthStart) {
+          label = `${current.getMonth() + 1}/${dayOfMonth}`;
+        } else if (isMonthMiddle) {
+          label = String(dayOfMonth);
+        }
+      } else {
+        // 只显示月初
+        shouldShow = isMonthStart;
+        if (isMonthStart) {
+          label = `${current.getMonth() + 1}/${dayOfMonth}`;
+        }
+      }
       
       if (shouldShow) {
         marks.push({
           date: new Date(current),
           offset,
-          label: dayOfMonth === 1 
-            ? `${current.getMonth() + 1}/${dayOfMonth}` 
-            : String(dayOfMonth),
+          label,
           dayOfMonth,
+          isWeekStart,
         });
       }
       
@@ -303,13 +342,13 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   }, [scale]);
   return (
     <section
-      className={`bg-white rounded-lg border border-[#E9E9E7] overflow-hidden flex flex-col transition-all duration-300 ${
+      className={`bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col transition-all duration-300 ${
         isCollapsed ? 'p-4' : 'p-0'
       }`}
     >
       <div
         className={`flex justify-between items-center group ${
-          isCollapsed ? '' : 'p-6 border-b border-[#E9E9E7]'
+          isCollapsed ? '' : 'p-6 border-b border-slate-200 bg-gradient-to-r from-white to-slate-50/30'
         }`}
       >
         <h3 className="text-sm font-semibold text-[#37352F] flex items-center gap-2">
@@ -399,51 +438,89 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                   minWidth: '800px'
                 }}
               >
-                {/* 时间轴刻度线 - 两层：月份和日期 */}
-                <div className="absolute top-0 left-0 border-b border-[#E9E9E7] bg-white z-10" style={{ width: `${totalWidth + 200}px`, height: scale >= 5 ? '48px' : '32px' }}>
-                  {/* 月份刻度线（上层） */}
-                  <div className="absolute top-0 left-0 right-0 h-6 border-b border-[#E9E9E7]">
-                    {monthMarks.map((mark, idx) => (
-                      <div key={`month-${idx}`} className="absolute top-0 bottom-0 flex flex-col items-center" style={{ left: `${mark.offset + 140}px` }}>
-                        <div className="w-px h-full bg-[#D9D9D7]" />
-                        <div className="absolute bottom-0 text-[10px] text-[#787774] font-semibold whitespace-nowrap">
-                          {mark.label}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {/* 每日日期刻度线（下层，仅在 scale >= 5 时显示） */}
-                  {scale >= 5 && (
-                    <div className="absolute top-6 left-0 right-0 h-6">
-                      {dayMarks.map((mark, idx) => (
+                {/* 时间轴刻度线 - 优化视觉层次 */}
+                <div 
+                  className="absolute top-0 left-0 bg-gradient-to-b from-white to-slate-50/30 z-10 border-b-2 border-slate-200" 
+                  style={{ 
+                    width: `${totalWidth + 200}px`, 
+                    height: scale >= 5 ? '56px' : scale >= 2 ? '40px' : '32px',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                  }}
+                >
+                  {/* 月份刻度线（上层，主要刻度） */}
+                  <div className="absolute top-0 left-0 right-0 h-8 border-b border-slate-200/50">
+                    {monthMarks.map((mark, idx) => {
+                      const isFirst = idx === 0;
+                      const isLast = idx === monthMarks.length - 1;
+                      return (
                         <div 
-                          key={`day-${idx}`} 
+                          key={`month-${idx}`} 
                           className="absolute top-0 bottom-0 flex flex-col items-center" 
                           style={{ left: `${mark.offset + 140}px` }}
                         >
-                          <div className={`w-px h-full ${mark.dayOfMonth === 1 ? 'bg-[#D9D9D7]' : 'bg-[#E9E9E7]'}`} />
-                          <div className={`absolute bottom-0 text-[8px] whitespace-nowrap ${
-                            mark.dayOfMonth === 1 ? 'text-[#787774] font-medium' : 'text-[#9B9A97]'
-                          }`}>
+                          {/* 主要刻度线 */}
+                          <div className={`w-0.5 h-full ${isFirst || isLast ? 'bg-slate-300' : 'bg-slate-400'}`} />
+                          {/* 月份标签 */}
+                          <div className="absolute bottom-1 text-[11px] text-slate-700 font-bold whitespace-nowrap px-1.5 py-0.5 bg-white/80 rounded border border-slate-200/50">
                             {mark.label}
                           </div>
                         </div>
-                      ))}
+                      );
+                    })}
+                  </div>
+                  
+                  {/* 每日日期刻度线（下层，次要刻度，仅在 scale >= 2 时显示） */}
+                  {scale >= 2 && (
+                    <div className="absolute top-8 left-0 right-0 h-6">
+                      {dayMarks.map((mark, idx) => {
+                        const isMonthStart = mark.dayOfMonth === 1;
+                        const isWeekStart = mark.isWeekStart;
+                        return (
+                          <div 
+                            key={`day-${idx}`} 
+                            className="absolute top-0 bottom-0 flex flex-col items-center" 
+                            style={{ left: `${mark.offset + 140}px` }}
+                          >
+                            {/* 次要刻度线 */}
+                            <div 
+                              className={`h-full ${
+                                isMonthStart 
+                                  ? 'w-0.5 bg-slate-300' 
+                                  : isWeekStart 
+                                  ? 'w-px bg-slate-200' 
+                                  : 'w-px bg-slate-100'
+                              }`} 
+                            />
+                            {/* 日期标签 - 只在月初和周一显示 */}
+                            {(isMonthStart || (isWeekStart && scale >= 5)) && (
+                              <div 
+                                className={`absolute bottom-0.5 text-[9px] whitespace-nowrap px-1 ${
+                                  isMonthStart 
+                                    ? 'text-slate-600 font-semibold' 
+                                    : 'text-slate-400 font-medium'
+                                }`}
+                              >
+                                {mark.label}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                   
-                  {/* 今天标记线 */}
+                  {/* 今天标记线 - 更明显的视觉 */}
                   <div
-                    className="absolute top-0 bottom-0 w-0.5 bg-[#E16259] z-20"
+                    className="absolute top-0 bottom-0 w-1 bg-gradient-to-b from-red-500 to-red-600 z-30 shadow-lg"
                     style={{ left: `${getDayOffset(TODAY_STR, scale) + 140}px` }}
                   >
-                    <div className="absolute -top-1 -left-3 bg-[#E16259] text-white text-[9px] px-1.5 py-0.5 rounded-md whitespace-nowrap font-medium">
-                      NOW
+                    <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[10px] px-2 py-1 rounded-md whitespace-nowrap font-bold shadow-md border-2 border-white">
+                      TODAY
                     </div>
+                    <div className="absolute top-6 left-1/2 -translate-x-1/2 w-2 h-2 bg-red-500 rounded-full border-2 border-white shadow-sm" />
                   </div>
                 </div>
-                <div className={`space-y-2 ${scale >= 5 ? 'pt-16' : 'pt-10'}`}>
+                <div className={`space-y-2 ${scale >= 5 ? 'pt-20' : scale >= 2 ? 'pt-14' : 'pt-10'}`}>
                   {ganttItems.map(item => {
                     const offset = getDayOffset(item.start, scale);
                     const width = Math.max(20, getDayOffset(item.end, scale) - offset);
@@ -495,10 +572,10 @@ export const GanttChart: React.FC<GanttChartProps> = ({
                           className="absolute left-0 truncate text-[11px] pr-2 text-right flex items-center gap-1.5"
                           style={{ width: `${120 + indent}px`, paddingLeft: `${indent}px` }}
                         >
-                          <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-md ${
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${
                             item.type === 'strategy' 
-                              ? 'bg-[#E3F2FD] text-[#2383E2]' 
-                              : 'bg-[#F1F1EF] text-[#787774]'
+                              ? 'bg-indigo-50 text-indigo-700 border-indigo-200' 
+                              : 'bg-slate-50 text-slate-600 border-slate-200'
                           }`}>
                             L{item.level}
                           </span>
