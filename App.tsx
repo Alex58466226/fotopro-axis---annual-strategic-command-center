@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { StrategyNode, Task, Level, Metric, ReportItem, ReportTag, TaskReport, User, AuditLog, TaskStatus } from './types';
 import { TODAY_STR, PROJECT_START, PROJECT_END, formatDate, getDayOffset, getMonthRange, getWeekRange, MOCK_USERS, AVATAR_COLORS } from './constants';
 import Icon from './components/Icon';
-import { suggestL4Tasks, generateWeeklyReport } from './services/aiService';
+import { suggestL4Tasks, generateWeeklyReport, generateTaskSuggestions } from './services/aiService';
 import { AuthContainer, type AuthMode } from './components/Auth/AuthContainer';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { Header } from './components/Header/Header';
@@ -375,6 +375,7 @@ const App: React.FC = () => {
   const [activeNodeId, setActiveNodeId] = useState<string>('L1-1');
   const [ganttScale, setGanttScale] = useState(10);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [taskSuggestions, setTaskSuggestions] = useState<Array<{ title: string; description: string }>>([]);
   
   // --- UI State ---
   const [filters, setFilters] = useState<Filters>({
@@ -525,6 +526,11 @@ const App: React.FC = () => {
 
     loadAllData();
   }, []);
+
+  // 切换策略节点时清空建议
+  useEffect(() => {
+    setTaskSuggestions([]);
+  }, [activeNodeId]);
 
   // 保存数据到 Supabase（防抖）
   useEffect(() => {
@@ -1121,6 +1127,89 @@ const App: React.FC = () => {
     if (suggestions) { const newTasks: Task[] = suggestions.map((s: any) => ({ id: generateId('ai'), parentId: activeNode.id, rootId: 'L1-1', text: s.title, notes: s.description, start: activeNode.start, end: activeNode.end, status: 'todo', progress: 0, owner: 'AI', product: '', channel: '', priority: 'P2', reports: [] })); setTasks(prev => [...prev, ...newTasks]); addLog('CREATE', 'TASK', 'AI Generation', `AI generated ${newTasks.length} tasks`); }
     setIsAiLoading(false);
   };
+
+  // 加载任务建议（基于策略和报告）
+  const loadTaskSuggestions = async () => {
+    setIsAiLoading(true);
+    try {
+      // 收集当前策略下的所有任务和报告
+      const currentTasks = tasks.filter(t => {
+        // 找到任务的根策略
+        let rootId = t.rootId;
+        if (!rootId && t.parentId) {
+          const parentStrategy = strategies.find(s => s.id === t.parentId);
+          if (parentStrategy) {
+            // 向上查找 L1
+            let current = parentStrategy;
+            while (current.parentId) {
+              const parent = strategies.find(s => s.id === current.parentId);
+              if (parent) current = parent;
+              else break;
+            }
+            rootId = current.id;
+          }
+        }
+        return rootId && strategies.find(s => s.id === rootId && activeBranchIds.includes(s.id));
+      });
+
+      // 收集所有报告
+      const allReports = currentTasks.flatMap(t => t.reports || []);
+
+      // 获取策略上下文
+      const parentStrategy = strategies.find(s => s.id === activeNode.parentId);
+      const context = parentStrategy ? `${parentStrategy.name} > ${activeNode.name}` : activeNode.name;
+
+      const suggestions = await generateTaskSuggestions(
+        activeNode.name,
+        context,
+        currentTasks,
+        allReports
+      );
+
+      if (suggestions && suggestions.length > 0) {
+        setTaskSuggestions(suggestions);
+      } else {
+        setTaskSuggestions([]);
+        showToast('info', '暂无建议，可以手动添加任务');
+      }
+    } catch (error) {
+      console.error('加载建议失败:', error);
+      showToast('error', '加载建议失败，请稍后重试');
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
+  // 选择建议并创建任务
+  const handleSelectSuggestion = (suggestion: { title: string; description: string }) => {
+    let root = activeNode;
+    while (root.parentId) {
+      const p = strategies.find(s => s.id === root.parentId);
+      if (p) root = p;
+      else break;
+    }
+    
+    const newTask: Task = {
+      id: generateId('t'),
+      parentId: activeNode.id,
+      rootId: root.id,
+      text: suggestion.title,
+      start: activeNode.start || TODAY_STR,
+      end: activeNode.end || TODAY_STR,
+      status: 'todo',
+      progress: 0,
+      owner: currentUser?.username || '',
+      product: '',
+      channel: '',
+      priority: 'P2',
+      notes: suggestion.description || '',
+      reports: []
+    };
+    
+    setTasks(prev => [...prev, newTask]);
+    addLog('CREATE', 'TASK', suggestion.title, `从建议创建任务`);
+    showToast('success', `任务 "${suggestion.title}" 已创建`);
+  };
   const openReportModal = async () => { setReportModal({ isOpen: true, items: [], isGenerating: true }); const generatedItems = await generateWeeklyReport(activeNode.name, activeTasks, stats); const itemsWithId = generatedItems.map(item => ({...item, id: generateId('rpt')})); setReportModal({ isOpen: true, items: itemsWithId, isGenerating: false }); addLog('REPORT', 'SYSTEM', activeNode.name, 'Generated AI Weekly Report'); };
   const addReportItem = () => { setReportModal(prev => ({ ...prev, items: [...prev.items, { id: generateId('rpt'), type: '进展', content: '' }] })); };
   const deleteReportItem = (id: string) => { setReportModal(prev => ({ ...prev, items: prev.items.filter(i => i.id !== id) })); };
@@ -1290,6 +1379,9 @@ const App: React.FC = () => {
             onTaskDelete={deleteTask}
             onAddTask={addTask}
             onAiAssist={handleAiAssist}
+            onSelectSuggestion={handleSelectSuggestion}
+            suggestions={taskSuggestions}
+            onLoadSuggestions={loadTaskSuggestions}
           />
           <footer className="text-center text-[9px] text-slate-300 font-medium py-4">FOTOPRO AXIS STRATEGIC SYSTEM v2.4 · BUILD {TODAY_STR.replace(/-/g, '')}</footer>
         </div>

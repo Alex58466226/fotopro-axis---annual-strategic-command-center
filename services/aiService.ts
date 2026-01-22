@@ -238,6 +238,153 @@ export const suggestL4Tasks = async (strategyName: string, parentContext: string
 };
 
 /**
+ * 根据当前策略和任务报告生成执行建议
+ * 用于快速选取建议条目
+ */
+export const generateTaskSuggestions = async (
+  strategyName: string,
+  strategyContext: string,
+  existingTasks: any[],
+  reports: any[]
+): Promise<Array<{ title: string; description: string }> | null> => {
+  const config = getAIConfig();
+  
+  if (config.model === 'none') {
+    // 如果没有配置 AI，返回基于现有数据的简单建议
+    return generateSimpleSuggestions(strategyName, existingTasks, reports);
+  }
+
+  // 汇总现有任务和报告信息
+  const taskSummary = existingTasks.length > 0
+    ? existingTasks.map((t: any) => `- ${t.text} (${t.status === 'completed' ? '已完成' : '进行中'})`).join('\n')
+    : '暂无任务';
+
+  const reportSummary = reports.length > 0
+    ? reports.map((r: any) => `[${r.type}] ${r.content}`).join('\n')
+    : '暂无报告';
+
+  const prompt = `你是一位资深的项目经理。请根据以下信息，为策略 "${strategyName}" 生成 5-8 个具体的、可立即执行的下一步任务建议。
+
+策略上下文: ${strategyContext}
+
+当前已有任务:
+${taskSummary}
+
+相关报告:
+${reportSummary}
+
+请基于以上信息，提出：
+1. 针对未完成任务的下一步行动
+2. 基于报告中发现的问题的解决方案
+3. 推进策略目标的新任务
+
+每个建议包含：
+- title: 任务标题（简洁明确）
+- description: 任务描述（一句话说明）
+
+请以 JSON 数组格式返回，格式：
+[{"title": "...", "description": "..."}, ...]`;
+
+  const responseSchema = {
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        description: { type: 'string' }
+      },
+      required: ['title', 'description']
+    }
+  };
+
+  let result: string | null = null;
+
+  if (config.model === 'gemini' && config.apiKey) {
+    const { Type } = await import("@google/genai");
+    const geminiSchema = {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          description: { type: Type.STRING }
+        },
+        required: ['title', 'description']
+      }
+    };
+    result = await callGeminiAPI(prompt, config.apiKey, geminiSchema);
+  } else if (config.model !== 'none' && config.apiKey) {
+    result = await callOpenAICompatibleAPI(prompt, config, responseSchema);
+  }
+
+  if (!result) {
+    // 如果 AI 调用失败，返回简单建议
+    return generateSimpleSuggestions(strategyName, existingTasks, reports);
+  }
+
+  try {
+    let jsonStr = result.trim();
+    if (jsonStr.startsWith('```json')) {
+      jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    } else if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/```\n?/g, '').trim();
+    }
+    const parsed = JSON.parse(jsonStr);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (error) {
+    console.error('解析 AI 响应失败:', error);
+    return generateSimpleSuggestions(strategyName, existingTasks, reports);
+  }
+};
+
+/**
+ * 生成简单建议（不依赖 AI）
+ */
+function generateSimpleSuggestions(
+  strategyName: string,
+  existingTasks: any[],
+  reports: any[]
+): Array<{ title: string; description: string }> {
+  const suggestions: Array<{ title: string; description: string }> = [];
+
+  // 基于报告中的问题生成建议
+  const problemReports = reports.filter((r: any) => r.type === '问题');
+  problemReports.forEach((r: any, idx: number) => {
+    if (idx < 3) {
+      suggestions.push({
+        title: `解决：${r.content.substring(0, 20)}...`,
+        description: `针对报告中提到的问题采取行动`
+      });
+    }
+  });
+
+  // 基于未完成的任务生成建议
+  const incompleteTasks = existingTasks.filter((t: any) => 
+    t.status !== 'completed' && t.status !== 'confirmed'
+  );
+  incompleteTasks.slice(0, 3).forEach((t: any) => {
+    suggestions.push({
+      title: `推进：${t.text}`,
+      description: `继续推进当前进行中的任务`
+    });
+  });
+
+  // 通用建议
+  if (suggestions.length < 5) {
+    suggestions.push({
+      title: `完善 ${strategyName} 的执行计划`,
+      description: `制定详细的执行步骤和时间安排`
+    });
+    suggestions.push({
+      title: `跟踪 ${strategyName} 的关键指标`,
+      description: `建立数据监控和反馈机制`
+    });
+  }
+
+  return suggestions.slice(0, 8);
+}
+
+/**
  * 根据当前任务状态生成周报内容
  */
 export const generateWeeklyReport = async (
