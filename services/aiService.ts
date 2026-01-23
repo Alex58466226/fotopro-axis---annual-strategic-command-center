@@ -86,7 +86,8 @@ const getAIConfig = (): AIConfig => {
 const callOpenAICompatibleAPI = async (
   prompt: string,
   config: AIConfig,
-  responseSchema?: any
+  responseSchema?: any,
+  isChatMode: boolean = false // 新增：是否为聊天模式
 ): Promise<string | null> => {
   if (!config.apiKey || !config.baseURL) return null;
 
@@ -453,7 +454,7 @@ export const chatWithAI = async (
   
   if (config.model === 'none') {
     return {
-      content: '抱歉，AI 功能需要配置 API Key。请在环境变量中配置 GEMINI_API_KEY 或其他支持的 AI 服务 API Key。',
+      content: '抱歉，AI 功能需要配置 API Key。请在环境变量中配置 GEMINI_API_KEY 或其他支持的 AI 服务 API Key。\n\n**配置步骤**：\n1. 在项目根目录创建 `.env.local` 文件\n2. 添加 `GEMINI_API_KEY=你的API密钥`\n3. 重启开发服务器\n\n详细配置说明请查看 `AI_CONFIG.md` 文件。',
     };
   }
 
@@ -463,11 +464,31 @@ export const chatWithAI = async (
 策略描述: ${context.activeNode.description || '无'}
 负责人: ${context.activeNode.owner || '未指定'}
 标签: ${context.activeNode.tags?.join(', ') || '无'}
+渠道: ${context.activeNode.channel || '未指定'}
+产品: ${context.activeNode.product || '未指定'}
+时间周期: ${context.activeNode.start || '未设置'} 至 ${context.activeNode.end || '未设置'}
 `;
+
+  // 获取策略层级信息
+  const getStrategyHierarchy = (node: any): string => {
+    const hierarchy: string[] = [];
+    let current: any = node;
+    while (current) {
+      hierarchy.unshift(`${current.name} (L${current.level})`);
+      if (current.parentId) {
+        current = context.strategies.find(s => s.id === current.parentId);
+      } else {
+        break;
+      }
+    }
+    return hierarchy.join(' > ');
+  };
+
+  const hierarchy = getStrategyHierarchy(context.activeNode);
 
   const taskSummary = context.tasks.length > 0
     ? context.tasks.map((t: any) => 
-        `- ${t.text} (状态: ${t.status}, 进度: ${t.progress}%)`
+        `- ${t.text} (状态: ${t.status === 'completed' ? '已完成' : t.status === 'in_progress' ? '进行中' : '待开始'}, 进度: ${t.progress}%, 优先级: ${t.priority || 'P2'}, 负责人: ${t.owner || '未分配'})`
       ).join('\n')
     : '暂无任务';
 
@@ -475,50 +496,31 @@ export const chatWithAI = async (
     ? `任务统计: 总计 ${context.stats.total} 个，已完成 ${context.stats.completed} 个，完成率 ${context.stats.rate}%`
     : '';
 
-  // 构建系统提示词
-  const systemPrompt = `你是一位资深的跨境电商项目管理专家，专门帮助用户管理年度战略项目。
-
-当前项目上下文：
-${strategyContext}
-
-相关任务：
-${taskSummary}
-
-${statsInfo}
-
-用户的问题或需求：
-${message}
-
-请根据用户的需求，提供有帮助的回答。如果需要生成任务建议，请以 JSON 格式返回 suggestions 数组。如果需要生成周报，请以 JSON 格式返回 reportItems 数组。
-
-回答格式要求：
-1. 如果是任务建议需求，在回答末尾添加 JSON 格式的 suggestions
-2. 如果是周报需求，在回答末尾添加 JSON 格式的 reportItems
-3. 如果是项目评估或总结，提供详细的分析和建议
-
-JSON 格式示例：
-\`\`\`json
-{
-  "suggestions": [
-    {"title": "任务标题", "description": "任务描述"}
-  ],
-  "reportItems": [
-    {"type": "进展", "content": "周报内容"}
-  ]
-}
-\`\`\``;
+  // 导入提示词模板
+  const { buildEnhancedSystemPrompt } = await import('./aiPromptTemplates');
+  
+  // 使用增强的系统提示词
+  const systemPrompt = buildEnhancedSystemPrompt(
+    message,
+    `策略层级: ${hierarchy}\n${strategyContext}`,
+    taskSummary,
+    statsInfo
+  );
 
   try {
     let result: string | null = null;
 
     if (config.model === 'gemini' && config.apiKey) {
-      const { GoogleGenerativeAI } = await import("@google/genai");
-      const genAI = new GoogleGenerativeAI(config.apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-      const response = await model.generateContent(systemPrompt);
-      result = response.response.text();
+      const { GoogleGenAI } = await import("@google/genai");
+      const ai = new GoogleGenAI({ apiKey: config.apiKey });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: systemPrompt
+      });
+      result = response.text || null;
     } else if (config.model !== 'none' && config.apiKey) {
-      result = await callOpenAICompatibleAPI(systemPrompt, config);
+      // 聊天模式：直接传递完整的系统提示词
+      result = await callOpenAICompatibleAPI(systemPrompt, config, undefined, true);
     }
 
     if (!result) {
