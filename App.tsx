@@ -497,11 +497,11 @@ const App: React.FC = () => {
         
         // 如果加载到数据且当前没有选中节点，设置默认选中的节点（第一个 L1 策略）
         if (strategiesData && strategiesData.length > 0) {
+          // 不再自动设置 activeNodeId，保持为空以显示全部项目
+          // 只有用户明确点击策略节点时才会设置 activeNodeId
           const firstL1 = strategiesData.find(s => s.level === 1);
           if (firstL1) {
-            // 使用函数式更新，确保基于最新状态
-            setActiveNodeId(prev => prev || firstL1.id);
-            // 自动展开第一个 L1 策略
+            // 自动展开第一个 L1 策略（但不选中）
             setExpandedNodes(prev => {
               const newSet = new Set(prev);
               newSet.add(firstL1.id);
@@ -917,13 +917,25 @@ const App: React.FC = () => {
       const found = strategies.find(s => s.id === activeNodeId);
       if (found) return found;
     }
-    // 如果没有选中节点或节点不存在，选择第一个 L1 策略
+    // 如果没有选中节点，返回一个默认的空节点结构（用于显示全部项目）
+    // 不再自动选择第一个 L1，保持 activeNodeId 为空以显示全部项目
+    if (!activeNodeId) {
+      return {
+        id: '',
+        level: 1 as Level,
+        name: '全部项目',
+        parentId: null,
+        start: PROJECT_START,
+        end: PROJECT_END,
+        owner: '',
+        metrics: [],
+        status: 'active' as const
+      } as StrategyNode;
+    }
+    
+    // 如果 activeNodeId 存在但节点不存在，尝试查找第一个 L1 作为后备
     const firstL1 = strategies.find(s => s.level === 1);
     if (firstL1) {
-      // 自动设置选中节点（仅在组件内部，不触发外部更新）
-      if (!activeNodeId) {
-        setActiveNodeId(firstL1.id);
-      }
       return firstL1;
     }
     // 如果没有任何策略，返回一个默认的空节点结构

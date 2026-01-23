@@ -87,8 +87,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
         />
       </div>
       <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
-        <div className="text-[10px] font-medium text-[#787774] uppercase tracking-wider mb-4 pl-1">
-          策略架构图谱
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-[10px] font-medium text-[#787774] uppercase tracking-wider pl-1">
+            策略架构图谱
+          </div>
+          {activeNodeId && (
+            <button
+              onClick={() => onNodeClick('')}
+              className="text-[9px] text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 px-2 py-1 rounded transition-all"
+              title="显示全部项目"
+            >
+              显示全部
+            </button>
+          )}
         </div>
         {topLevelStrategies.map(node => (
           <StrategyTree
