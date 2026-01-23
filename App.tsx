@@ -249,23 +249,7 @@ const exportToCSV = (tasks: Task[], strategies: StrategyNode[], filteredStrategi
 };
 
 // --- Initial Data ---
-const INIT_STRATEGIES: StrategyNode[] = [
-  { 
-    id: 'L1-1', level: 1, name: '2026 全球品牌心智工程', parentId: null, start: '2026-01-01', end: '2026-12-31', owner: 'CEO', status: 'active', channel: 'Global', product: 'All', tags: ['品牌', '年度'],
-    metrics: [{ id: 'm1', label: '全球市占率', value: '15%', description: '核心影像市场 (不含手机配件)' }]
-  },
-  { 
-    id: 'L2-1', level: 2, name: '北美市场扩张', parentId: 'L1-1', start: '2026-01-01', end: '2026-06-30', owner: 'VP Sales', status: 'active', group: 'A组: 直营', channel: 'Amazon/Indie', product: 'Tripods', tags: ['增长'],
-    metrics: [{ id: 'm2', label: 'Q1 Revenue', value: '$3.5M', description: '同比 +40%，主要来自 Amazon 渠道' }] 
-  },
-  { id: 'L2-2', level: 2, name: '北美市场代理制', parentId: 'L1-1', start: '2026-01-01', end: '2026-06-30', owner: 'VP Channel', metrics: [], status: 'delayed', group: 'B组: 代理', channel: 'Distributors', product: 'Tripods', tags: ['B2B'] },
-  { id: 'L3-1', level: 3, name: '洛杉矶旗舰店落地', parentId: 'L2-1', start: '2026-01-01', end: '2026-03-31', owner: 'Director', metrics: [], status: 'active', channel: 'Retail', product: 'Store', tags: ['线下'] },
-];
-
-const INIT_TASKS: Task[] = [
-  { id: 't1', parentId: 'L3-1', rootId: 'L1-1', text: '签署租赁合同', start: '2026-01-05', end: '2026-01-10', status: 'confirmed', progress: 100, owner: '法务', product: '-', channel: '线下', priority: 'P0', notes: '已完成归档', reviewer: 'CEO', score: 95, reports: [{ id: 'rpt1', type: '结果', content: '合同已双签归档，押金已付。', timestamp: '2026-01-10' }] },
-  { id: 't2', parentId: 'L3-1', rootId: 'L1-1', text: '首批装修进场', start: '2026-01-12', end: '2026-02-15', status: 'in_progress', progress: 30, owner: '工程部', product: '-', channel: '线下', priority: 'P1', notes: '材料运输延迟', reports: [{ id: 'rpt2', type: '问题', content: '海运物流延期导致主材未到场。', timestamp: '2026-01-15' }] },
-];
+// 已移除测试数据，所有数据从 Supabase 加载
 
 interface ModalState {
   isOpen: boolean;
@@ -370,11 +354,11 @@ const App: React.FC = () => {
   const [newUser, setNewUser] = useState({ username: '', password: '' });
 
   // --- Data State ---
-  const [strategies, setStrategies] = useState<StrategyNode[]>(INIT_STRATEGIES);
-  const [tasks, setTasks] = useState<Task[]>(INIT_TASKS);
+  const [strategies, setStrategies] = useState<StrategyNode[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
-  const [activeNodeId, setActiveNodeId] = useState<string>('L1-1');
+  const [activeNodeId, setActiveNodeId] = useState<string>('');
   const [ganttScale, setGanttScale] = useState(10);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [taskSuggestions, setTaskSuggestions] = useState<Array<{ title: string; description: string }>>([]);
@@ -396,7 +380,7 @@ const App: React.FC = () => {
   const [listHeight, setListHeight] = useState<number>(400);
 
   // Sidebar Tree State
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['L1-1', 'L2-1', 'L3-1']));
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -486,24 +470,30 @@ const App: React.FC = () => {
       try {
         // 加载策略数据
         const strategiesData = await loadStrategies();
-        if (strategiesData.length > 0) {
-          setStrategies(strategiesData);
-        } else {
-          // 如果没有数据，使用初始数据
-          setStrategies(INIT_STRATEGIES);
+        setStrategies(strategiesData || []);
+        
+        // 如果加载到数据且当前没有选中节点，设置默认选中的节点（第一个 L1 策略）
+        if (strategiesData && strategiesData.length > 0) {
+          const firstL1 = strategiesData.find(s => s.level === 1);
+          if (firstL1) {
+            // 使用函数式更新，确保基于最新状态
+            setActiveNodeId(prev => prev || firstL1.id);
+            // 自动展开第一个 L1 策略
+            setExpandedNodes(prev => {
+              const newSet = new Set(prev);
+              newSet.add(firstL1.id);
+              return newSet;
+            });
+          }
         }
 
         // 加载任务数据
         const tasksData = await loadTasks();
-        if (tasksData.length > 0) {
-          setTasks(tasksData);
-        } else {
-          setTasks(INIT_TASKS);
-        }
+        setTasks(tasksData || []);
 
         // 加载审计日志
         const logsData = await loadAuditLogs();
-        setAuditLogs(logsData);
+        setAuditLogs(logsData || []);
 
         // 加载用户列表（从 profiles 表）
         const { data: profiles, error: profilesError } = await supabase
@@ -894,7 +884,34 @@ const App: React.FC = () => {
   };
 
   // --- Derived Data & Functions (Unchanged) ---
-  const activeNode = strategies.find(s => s.id === activeNodeId) || strategies[0];
+  // 获取当前选中的节点，如果没有选中或节点不存在，返回一个默认的空节点结构
+  const activeNode = useMemo(() => {
+    if (activeNodeId) {
+      const found = strategies.find(s => s.id === activeNodeId);
+      if (found) return found;
+    }
+    // 如果没有选中节点或节点不存在，选择第一个 L1 策略
+    const firstL1 = strategies.find(s => s.level === 1);
+    if (firstL1) {
+      // 自动设置选中节点（仅在组件内部，不触发外部更新）
+      if (!activeNodeId) {
+        setActiveNodeId(firstL1.id);
+      }
+      return firstL1;
+    }
+    // 如果没有任何策略，返回一个默认的空节点结构
+    return {
+      id: '',
+      level: 1 as Level,
+      name: '暂无策略',
+      parentId: null,
+      start: PROJECT_START,
+      end: PROJECT_END,
+      owner: '',
+      metrics: [],
+      status: 'active' as const
+    } as StrategyNode;
+  }, [strategies, activeNodeId]);
   const getDescendantIds = (nodeId: string): string[] => {
     const children = strategies.filter(s => s.parentId === nodeId);
     let ids = [nodeId];
