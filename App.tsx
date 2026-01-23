@@ -1174,7 +1174,33 @@ const App: React.FC = () => {
       return;
     }
     setIsAiLoading(true); const parent = strategies.find(s => s.id === activeNode.parentId); const suggestions = await suggestL4Tasks(activeNode.name, parent?.name || "");
-    if (suggestions) { const newTasks: Task[] = suggestions.map((s: any) => ({ id: generateId('ai'), parentId: activeNode.id, rootId: 'L1-1', text: s.title, notes: s.description, start: activeNode.start, end: activeNode.end, status: 'todo', progress: 0, owner: 'AI', product: '', channel: '', priority: 'P2', reports: [] })); setTasks(prev => [...prev, ...newTasks]); addLog('CREATE', 'TASK', 'AI Generation', `AI generated ${newTasks.length} tasks`); }
+    if (suggestions) {
+      // 找到根策略（L1）
+      let root = activeNode;
+      while (root.parentId) {
+        const p = strategies.find(s => s.id === root.parentId);
+        if (p) root = p;
+        else break;
+      }
+      const newTasks: Task[] = suggestions.map((s: any) => ({
+        id: generateId('ai'),
+        parentId: activeNode.id,
+        rootId: root.id,
+        text: s.title,
+        notes: s.description,
+        start: activeNode.start || TODAY_STR,
+        end: activeNode.end || TODAY_STR,
+        status: 'todo',
+        progress: 0,
+        owner: 'AI',
+        product: '',
+        channel: '',
+        priority: 'P2',
+        reports: []
+      }));
+      setTasks(prev => [...prev, ...newTasks]);
+      addLog('CREATE', 'TASK', 'AI Generation', `AI generated ${newTasks.length} tasks`);
+    }
     setIsAiLoading(false);
   };
 
