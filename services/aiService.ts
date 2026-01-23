@@ -127,16 +127,31 @@ const callOpenAICompatibleAPI = async (
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error(`${config.model} API 错误:`, error);
-      return null;
+      const errorText = await response.text();
+      let errorMessage = errorText;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error?.message || errorJson.message || errorText;
+      } catch {
+        // 如果解析失败，使用原始文本
+      }
+      console.error(`${config.model} API 错误 (${response.status}):`, errorMessage);
+      throw new Error(`${config.model} API 错误: ${errorMessage}`);
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || null;
-  } catch (error) {
+    const content = data.choices?.[0]?.message?.content || null;
+    if (!content) {
+      console.error(`${config.model} API 返回空内容:`, data);
+      throw new Error(`${config.model} API 返回空内容`);
+    }
+    return content;
+  } catch (error: any) {
     console.error(`${config.model} API 调用失败:`, error);
-    return null;
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(`${config.model} API 调用失败: ${error?.message || '未知错误'}`);
   }
 };
 
@@ -166,10 +181,18 @@ const callGeminiAPI = async (
     }
 
     const response = await ai.models.generateContent(config);
-    return response.text || null;
-  } catch (error) {
+    const text = response.text || null;
+    if (!text) {
+      console.error("Gemini API 返回空内容");
+      throw new Error("Gemini API 返回空内容");
+    }
+    return text;
+  } catch (error: any) {
     console.error("Gemini API 错误:", error);
-    return null;
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(`Gemini API 错误: ${error?.message || '未知错误'}`);
   }
 };
 
@@ -245,7 +268,8 @@ export const generateTaskSuggestions = async (
   strategyName: string,
   strategyContext: string,
   existingTasks: any[],
-  reports: any[]
+  reports: any[],
+  customPrompt?: string // 新增：自定义提示词，用于微调生成
 ): Promise<Array<{ title: string; description: string }> | null> => {
   const config = getAIConfig();
   
@@ -302,26 +326,42 @@ ${reportSummary}
 
   let result: string | null = null;
 
-  if (config.model === 'gemini' && config.apiKey) {
-    const { Type } = await import("@google/genai");
-    const geminiSchema = {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          description: { type: Type.STRING }
-        },
-        required: ['title', 'description']
-      }
-    };
-    result = await callGeminiAPI(prompt, config.apiKey, geminiSchema);
-  } else if (config.model !== 'none' && config.apiKey) {
-    result = await callOpenAICompatibleAPI(prompt, config, responseSchema);
-  }
+  try {
+    if (config.model === 'gemini' && config.apiKey) {
+      const { Type } = await import("@google/genai");
+      const geminiSchema = {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            description: { type: Type.STRING }
+          },
+          required: ['title', 'description']
+        }
+      };
+      result = await callGeminiAPI(prompt, config.apiKey, geminiSchema);
+    } else if (config.model !== 'none' && config.apiKey) {
+      result = await callOpenAICompatibleAPI(prompt, config, responseSchema);
+    } else {
+      // 如果没有配置 AI，返回简单建议
+      return generateSimpleSuggestions(strategyName, existingTasks, reports);
+    }
 
-  if (!result) {
-    // 如果 AI 调用失败，返回简单建议
+    if (!result) {
+      // 如果 AI 调用失败，返回简单建议
+      console.warn('AI 调用返回空结果，使用简单建议');
+      return generateSimpleSuggestions(strategyName, existingTasks, reports);
+    }
+  } catch (error: any) {
+    console.error('AI 调用异常:', error);
+    console.error('错误详情:', {
+      message: error?.message,
+      stack: error?.stack,
+      model: config.model,
+      customPrompt,
+    });
+    // 如果 AI 调用失败，返回简单建议而不是抛出错误
     return generateSimpleSuggestions(strategyName, existingTasks, reports);
   }
 
@@ -336,9 +376,14 @@ ${reportSummary}
     return Array.isArray(parsed) ? parsed : null;
   } catch (error) {
     console.error('解析 AI 响应失败:', error);
+    console.error('原始响应:', result);
+    // 如果解析失败，尝试返回简单建议
     return generateSimpleSuggestions(strategyName, existingTasks, reports);
   }
 };
+
+// 导出简单建议生成函数，供外部使用
+export { generateSimpleSuggestions };
 
 /**
  * 生成简单建议（不依赖 AI）

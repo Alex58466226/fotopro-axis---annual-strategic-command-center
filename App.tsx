@@ -1348,9 +1348,17 @@ const App: React.FC = () => {
         setTaskSuggestions([]);
         showToast('info', '暂无建议，可以手动添加任务');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('加载建议失败:', error);
-      showToast('error', '加载建议失败，请稍后重试');
+      console.error('错误详情:', {
+        message: error?.message,
+        stack: error?.stack,
+        customPrompt,
+        activeNodeId: activeNode.id,
+        activeNodeName: activeNode.name,
+      });
+      showToast('error', `加载建议失败: ${error?.message || '未知错误'}，请稍后重试`);
+      setTaskSuggestions([]);
     } finally {
       setIsAiLoading(false);
     }
