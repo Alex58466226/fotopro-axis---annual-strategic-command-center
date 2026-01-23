@@ -1695,6 +1695,7 @@ const App: React.FC = () => {
         onUpdateItem={updateReportItem}
         onDeleteItem={deleteReportItem}
         onCopyToClipboard={copyReportToClipboard}
+        onRegenerate={regenerateReport}
       />
 
       <ProjectDashboardModal
