@@ -1020,8 +1020,35 @@ const App: React.FC = () => {
   const updateMetric = (index: number, field: keyof Metric, value: string) => { setModal(prev => { const newMetrics = [...(prev.data.metrics || [])]; newMetrics[index] = { ...newMetrics[index], [field]: value }; return { ...prev, data: { ...prev.data, metrics: newMetrics } }; }); };
   const removeMetric = (index: number) => { setModal(prev => ({ ...prev, data: { ...prev.data, metrics: (prev.data.metrics || []).filter((_, i) => i !== index) } })); };
   const openStrategyModal = (mode: 'create' | 'edit', level?: Level, parentId?: string | null, targetNode?: StrategyNode) => {
-    if (mode === 'create') { setModal({ isOpen: true, mode: 'create', data: { ...DEFAULT_MODAL_DATA, level: level || 1, parentId: parentId || '', start: parentId ? (strategies.find(s => s.id === parentId)?.start || PROJECT_START) : PROJECT_START, end: parentId ? (strategies.find(s => s.id === parentId)?.end || PROJECT_END) : PROJECT_END, owner: currentUser?.username || '' } }); } 
-    else { const node = targetNode || activeNode; setModal({ isOpen: true, mode: 'edit', data: { ...node, parentId: node.parentId || '', tagsString: node.tags?.join(', ') || '', metrics: node.metrics ? [...node.metrics] : [] } }); }
+    if (mode === 'create') { 
+      setModal({ 
+        isOpen: true, 
+        mode: 'create', 
+        data: { 
+          ...DEFAULT_MODAL_DATA, 
+          level: level || 1, 
+          parentId: parentId || '', 
+          start: parentId ? (strategies.find(s => s.id === parentId)?.start || PROJECT_START) : PROJECT_START, 
+          end: parentId ? (strategies.find(s => s.id === parentId)?.end || PROJECT_END) : PROJECT_END, 
+          owner: currentUser?.username || '' 
+        } 
+      }); 
+    } else { 
+      const node = targetNode || activeNode; 
+      setModal({ 
+        isOpen: true, 
+        mode: 'edit', 
+        data: { 
+          ...node, 
+          parentId: node.parentId || '', 
+          tagsString: node.tags?.join(', ') || '', 
+          metrics: node.metrics ? [...node.metrics] : [],
+          reviewer: node.reviewer,
+          score: node.score,
+          reviewComment: node.reviewComment
+        } 
+      }); 
+    }
   };
   const handleSaveModal = () => {
     const { name, level, parentId, owner, group, channel, product, tagsString, start, end, id, metrics, reviewer, score, reviewComment } = modal.data;
