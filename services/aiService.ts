@@ -385,6 +385,155 @@ function generateSimpleSuggestions(
 }
 
 /**
+ * AI 聊天对话功能
+ * 整合智能周报、快速建议、项目总结等功能
+ */
+export const chatWithAI = async (
+  message: string,
+  context: {
+    activeNode: any;
+    strategies: any[];
+    tasks: any[];
+    stats?: any;
+  }
+): Promise<{
+  content: string;
+  suggestions?: Array<{ title: string; description: string }>;
+  reportItems?: Array<{ type: '进展' | '问题' | '计划' | '结果' | '复盘'; content: string }>;
+}> => {
+  const config = getAIConfig();
+  
+  if (config.model === 'none') {
+    return {
+      content: '抱歉，AI 功能需要配置 API Key。请在环境变量中配置 GEMINI_API_KEY 或其他支持的 AI 服务 API Key。',
+    };
+  }
+
+  // 构建上下文信息
+  const strategyContext = `
+当前策略: ${context.activeNode.name} (L${context.activeNode.level})
+策略描述: ${context.activeNode.description || '无'}
+负责人: ${context.activeNode.owner || '未指定'}
+标签: ${context.activeNode.tags?.join(', ') || '无'}
+`;
+
+  const taskSummary = context.tasks.length > 0
+    ? context.tasks.map((t: any) => 
+        `- ${t.text} (状态: ${t.status}, 进度: ${t.progress}%)`
+      ).join('\n')
+    : '暂无任务';
+
+  const statsInfo = context.stats
+    ? `任务统计: 总计 ${context.stats.total} 个，已完成 ${context.stats.completed} 个，完成率 ${context.stats.rate}%`
+    : '';
+
+  // 构建系统提示词
+  const systemPrompt = `你是一位资深的跨境电商项目管理专家，专门帮助用户管理年度战略项目。
+
+当前项目上下文：
+${strategyContext}
+
+相关任务：
+${taskSummary}
+
+${statsInfo}
+
+用户的问题或需求：
+${message}
+
+请根据用户的需求，提供有帮助的回答。如果需要生成任务建议，请以 JSON 格式返回 suggestions 数组。如果需要生成周报，请以 JSON 格式返回 reportItems 数组。
+
+回答格式要求：
+1. 如果是任务建议需求，在回答末尾添加 JSON 格式的 suggestions
+2. 如果是周报需求，在回答末尾添加 JSON 格式的 reportItems
+3. 如果是项目评估或总结，提供详细的分析和建议
+
+JSON 格式示例：
+\`\`\`json
+{
+  "suggestions": [
+    {"title": "任务标题", "description": "任务描述"}
+  ],
+  "reportItems": [
+    {"type": "进展", "content": "周报内容"}
+  ]
+}
+\`\`\``;
+
+  try {
+    let result: string | null = null;
+
+    if (config.model === 'gemini' && config.apiKey) {
+      const { GoogleGenerativeAI } = await import("@google/genai");
+      const genAI = new GoogleGenerativeAI(config.apiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+      const response = await model.generateContent(systemPrompt);
+      result = response.response.text();
+    } else if (config.model !== 'none' && config.apiKey) {
+      result = await callOpenAICompatibleAPI(systemPrompt, config);
+    }
+
+    if (!result) {
+      return {
+        content: '抱歉，AI 服务暂时不可用。请检查 API 配置或稍后重试。',
+      };
+    }
+
+    // 解析响应，提取 JSON 数据
+    let content = result;
+    let suggestions: Array<{ title: string; description: string }> | undefined;
+    let reportItems: Array<{ type: '进展' | '问题' | '计划' | '结果' | '复盘'; content: string }> | undefined;
+
+    // 尝试提取 JSON
+    const jsonMatch = result.match(/```json\s*([\s\S]*?)\s*```/);
+    if (jsonMatch) {
+      try {
+        const jsonData = JSON.parse(jsonMatch[1]);
+        if (jsonData.suggestions) suggestions = jsonData.suggestions;
+        if (jsonData.reportItems) reportItems = jsonData.reportItems;
+        // 移除 JSON 部分，只保留文本内容
+        content = result.replace(/```json\s*[\s\S]*?\s*```/g, '').trim();
+      } catch (e) {
+        console.error('解析 JSON 失败:', e);
+      }
+    }
+
+    // 如果没有提取到 JSON，尝试根据关键词调用相应函数
+    if (!suggestions && !reportItems) {
+      const lowerMessage = message.toLowerCase();
+      if (lowerMessage.includes('建议') || lowerMessage.includes('任务')) {
+        // 生成任务建议
+        const allReports = context.tasks.flatMap((t: any) => t.reports || []);
+        suggestions = await generateTaskSuggestions(
+          context.activeNode.name,
+          strategyContext,
+          context.tasks,
+          allReports
+        ) || [];
+      } else if (lowerMessage.includes('周报') || lowerMessage.includes('总结')) {
+        // 生成周报
+        reportItems = await generateWeeklyReport(
+          context.activeNode.name,
+          context.tasks,
+          context.stats || { total: context.tasks.length, completed: 0, rate: 0, timeUsedRate: 0 }
+        );
+      }
+    }
+
+    return {
+      content,
+      suggestions,
+      reportItems,
+    };
+  } catch (error) {
+    console.error('AI 聊天错误:', error);
+    return {
+      content: '抱歉，处理你的请求时出现了错误。请稍后重试。',
+    };
+  }
+};
+
+/**
  * 根据当前任务状态生成周报内容
  */
 export const generateWeeklyReport = async (

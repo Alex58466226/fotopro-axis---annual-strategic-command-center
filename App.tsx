@@ -18,6 +18,7 @@ import { ReportModal } from './components/Modal/ReportModal';
 import { ProjectDashboardModal } from './components/Modal/ProjectDashboardModal';
 import { FullscreenModal } from './components/Modal/FullscreenModal';
 import { ImportModal } from './components/Modal/ImportModal';
+import { AIChatModal } from './components/Modal/AIChatModal';
 import { ToastContainer, type ToastType } from './components/Toast';
 import {
   loginWithSupabase,
@@ -371,6 +372,7 @@ const App: React.FC = () => {
   const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   
   // Toast 通知状态
   const [toasts, setToasts] = useState<Array<{ id: string; type: ToastType; message: string }>>([]);
@@ -1383,6 +1385,15 @@ const App: React.FC = () => {
     addLog('CREATE', 'TASK', suggestion.title, `从建议创建任务`);
     showToast('success', `任务 "${suggestion.title}" 已创建`);
   };
+
+  // 处理 AI 聊天中的周报条目使用
+  const handleAIReportItemsUse = (items: Array<{ type: '进展' | '问题' | '计划' | '结果' | '复盘'; content: string }>) => {
+    const itemsWithId = items.map(item => ({...item, id: generateId('rpt')}));
+    setReportModal({ isOpen: true, items: itemsWithId, isGenerating: false });
+    addLog('REPORT', 'SYSTEM', activeNode.name, 'Used AI generated report items');
+    showToast('success', '周报条目已加载');
+  };
+
   const openReportModal = async () => { setReportModal({ isOpen: true, items: [], isGenerating: true }); const generatedItems = await generateWeeklyReport(activeNode.name, activeTasks, stats); const itemsWithId = generatedItems.map(item => ({...item, id: generateId('rpt')})); setReportModal({ isOpen: true, items: itemsWithId, isGenerating: false }); addLog('REPORT', 'SYSTEM', activeNode.name, 'Generated AI Weekly Report'); };
   const addReportItem = () => { setReportModal(prev => ({ ...prev, items: [...prev.items, { id: generateId('rpt'), type: '进展', content: '' }] })); };
   const deleteReportItem = (id: string) => { setReportModal(prev => ({ ...prev, items: prev.items.filter(i => i.id !== id) })); };
@@ -1479,6 +1490,7 @@ const App: React.FC = () => {
         onLogoutClick={handleLogout}
         onMapModalOpen={() => setIsMapModalOpen(true)}
         onReportModalOpen={openReportModal}
+        onAIChatOpen={() => setIsAIChatOpen(true)}
         onAddSubStrategy={(level, parentId) => openStrategyModal('create', level, parentId)}
         onAddTopStrategy={() => openStrategyModal('create', 1, null)}
         onImportData={() => setIsImportModalOpen(true)}
@@ -1646,6 +1658,16 @@ const App: React.FC = () => {
         existingTasks={tasks}
         onClose={() => setIsImportModalOpen(false)}
         onImport={handleImportData}
+      />
+
+      <AIChatModal
+        isOpen={isAIChatOpen}
+        onClose={() => setIsAIChatOpen(false)}
+        activeNode={activeNode}
+        strategies={strategies}
+        tasks={activeTasks}
+        onSelectSuggestion={handleAISuggestionSelect}
+        onUseReportItems={handleAIReportItemsUse}
       />
 
       <ReportModal

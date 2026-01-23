@@ -20,6 +20,7 @@ interface SidebarProps {
   onLogoutClick: () => void;
   onMapModalOpen: () => void;
   onReportModalOpen: () => void;
+  onAIChatOpen?: () => void;
   onAddSubStrategy: (level: Level, parentId: string) => void;
   onAddTopStrategy: () => void;
   onImportData: () => void;
@@ -46,6 +47,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLogoutClick,
   onMapModalOpen,
   onReportModalOpen,
+  onAIChatOpen,
   onAddSubStrategy,
   onAddTopStrategy,
   onImportData,
@@ -104,7 +106,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ))}
         {/* 操作按钮区域 - 优化分组和视觉层次 */}
         <div className="mt-6 space-y-4">
-          {/* 高频操作：智能周报 - Notion 风格 */}
+          {/* 高频操作：AI 助手 - Notion 风格 */}
+          {onAIChatOpen && (
+            <button
+              onClick={onAIChatOpen}
+              className="w-full py-2.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-md text-[11px] font-medium hover:from-indigo-600 hover:to-purple-600 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mb-4 shadow-md"
+            >
+              <Icon name="sparkles" size={14} /> AI 助手
+            </button>
+          )}
           <button
             onClick={onReportModalOpen}
             className="w-full py-2.5 bg-[#2383E2] text-white rounded-md text-[11px] font-medium hover:bg-[#1A73D1] active:scale-[0.98] transition-all flex items-center justify-center gap-2 mb-4"
