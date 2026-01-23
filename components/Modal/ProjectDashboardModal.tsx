@@ -74,45 +74,51 @@ export const ProjectDashboardModal: React.FC<ProjectDashboardModalProps> = ({
 }) => {
   // 计算核心指标
   const metrics = useMemo<DashboardMetrics>(() => {
-    // 获取当前分支的所有任务
-    // 如果 activeBranchIds 为空，使用 activeNode 及其所有子节点
-    const effectiveBranchIds = activeBranchIds.length > 0 
-      ? activeBranchIds 
-      : (() => {
-          const ids = [activeNode.id];
-          const getChildren = (parentId: string) => {
-            strategies.forEach(s => {
-              if (s.parentId === parentId) {
-                ids.push(s.id);
-                getChildren(s.id);
-              }
-            });
-          };
-          getChildren(activeNode.id);
-          return ids;
-        })();
+    // 简化逻辑：直接获取当前节点及其所有子节点的 ID
+    const getAllDescendantIds = (nodeId: string): string[] => {
+      const ids = [nodeId];
+      strategies.forEach(s => {
+        if (s.parentId === nodeId) {
+          ids.push(...getAllDescendantIds(s.id));
+        }
+      });
+      return ids;
+    };
 
+    // 获取所有相关节点 ID（包括当前节点和所有子节点）
+    const relatedNodeIds = getAllDescendantIds(activeNode.id);
+    
+    // 获取所有相关策略（当前节点及其所有子策略）
+    const branchStrategies = strategies.filter((s) => relatedNodeIds.includes(s.id));
+    
+    // 获取所有相关任务（通过 parentId 或 rootId 匹配）
     const branchTasks = tasks.filter((t) => {
-      let rootId = t.rootId;
-      if (!rootId && t.parentId) {
+      // 直接匹配 parentId
+      if (t.parentId && relatedNodeIds.includes(t.parentId)) {
+        return true;
+      }
+      // 匹配 rootId
+      if (t.rootId && relatedNodeIds.includes(t.rootId)) {
+        return true;
+      }
+      // 如果任务没有 rootId，尝试通过 parentId 向上查找
+      if (t.parentId && !t.rootId) {
         const parentStrategy = strategies.find((s) => s.id === t.parentId);
         if (parentStrategy) {
           let current = parentStrategy;
           while (current.parentId) {
+            if (relatedNodeIds.includes(current.id)) {
+              return true;
+            }
             const parent = strategies.find((s) => s.id === current.parentId);
             if (parent) current = parent;
             else break;
           }
-          rootId = current.id;
+          // 检查根节点
+          if (relatedNodeIds.includes(current.id)) {
+            return true;
+          }
         }
-      }
-      // 如果任务有 rootId，检查是否在分支中
-      if (rootId) {
-        return effectiveBranchIds.includes(rootId);
-      }
-      // 如果任务没有 rootId，检查 parentId 是否在分支中
-      if (t.parentId) {
-        return effectiveBranchIds.includes(t.parentId);
       }
       return false;
     });
@@ -120,11 +126,13 @@ export const ProjectDashboardModal: React.FC<ProjectDashboardModalProps> = ({
     console.log('项目评估看板 - 数据统计:', {
       activeNodeId: activeNode.id,
       activeNodeName: activeNode.name,
-      activeBranchIds: activeBranchIds.length,
-      effectiveBranchIds: effectiveBranchIds.length,
-      totalTasks: tasks.length,
+      activeNodeLevel: activeNode.level,
+      relatedNodeIds: relatedNodeIds.length,
+      branchStrategies: branchStrategies.length,
       branchTasks: branchTasks.length,
+      totalTasks: tasks.length,
       totalStrategies: strategies.length,
+      taskDetails: branchTasks.map(t => ({ id: t.id, text: t.text, parentId: t.parentId, rootId: t.rootId, score: t.score })),
     });
 
     // 1. 任务得分计算
@@ -163,13 +171,13 @@ export const ProjectDashboardModal: React.FC<ProjectDashboardModalProps> = ({
       timeEfficiencyValue >= 80 ? '优秀' : timeEfficiencyValue >= 60 ? '良好' : '需改进';
 
     // 4. 事项拆分分析
-    const branchStrategies = strategies.filter((s) => effectiveBranchIds.includes(s.id));
     const l3Strategies = branchStrategies.filter((s) => s.level === 3);
     
     console.log('项目评估看板 - 策略统计:', {
       branchStrategies: branchStrategies.length,
       l3Strategies: l3Strategies.length,
       l3StrategyNames: l3Strategies.map(s => s.name),
+      l3StrategyIds: l3Strategies.map(s => s.id),
     });
     const tasksPerStrategy =
       l3Strategies.length > 0
