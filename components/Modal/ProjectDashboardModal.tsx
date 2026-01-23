@@ -75,6 +75,23 @@ export const ProjectDashboardModal: React.FC<ProjectDashboardModalProps> = ({
   // 计算核心指标
   const metrics = useMemo<DashboardMetrics>(() => {
     // 获取当前分支的所有任务
+    // 如果 activeBranchIds 为空，使用 activeNode 及其所有子节点
+    const effectiveBranchIds = activeBranchIds.length > 0 
+      ? activeBranchIds 
+      : (() => {
+          const ids = [activeNode.id];
+          const getChildren = (parentId: string) => {
+            strategies.forEach(s => {
+              if (s.parentId === parentId) {
+                ids.push(s.id);
+                getChildren(s.id);
+              }
+            });
+          };
+          getChildren(activeNode.id);
+          return ids;
+        })();
+
     const branchTasks = tasks.filter((t) => {
       let rootId = t.rootId;
       if (!rootId && t.parentId) {
@@ -89,7 +106,25 @@ export const ProjectDashboardModal: React.FC<ProjectDashboardModalProps> = ({
           rootId = current.id;
         }
       }
-      return rootId && activeBranchIds.includes(rootId);
+      // 如果任务有 rootId，检查是否在分支中
+      if (rootId) {
+        return effectiveBranchIds.includes(rootId);
+      }
+      // 如果任务没有 rootId，检查 parentId 是否在分支中
+      if (t.parentId) {
+        return effectiveBranchIds.includes(t.parentId);
+      }
+      return false;
+    });
+
+    console.log('项目评估看板 - 数据统计:', {
+      activeNodeId: activeNode.id,
+      activeNodeName: activeNode.name,
+      activeBranchIds: activeBranchIds.length,
+      effectiveBranchIds: effectiveBranchIds.length,
+      totalTasks: tasks.length,
+      branchTasks: branchTasks.length,
+      totalStrategies: strategies.length,
     });
 
     // 1. 任务得分计算
@@ -128,8 +163,14 @@ export const ProjectDashboardModal: React.FC<ProjectDashboardModalProps> = ({
       timeEfficiencyValue >= 80 ? '优秀' : timeEfficiencyValue >= 60 ? '良好' : '需改进';
 
     // 4. 事项拆分分析
-    const branchStrategies = strategies.filter((s) => activeBranchIds.includes(s.id));
+    const branchStrategies = strategies.filter((s) => effectiveBranchIds.includes(s.id));
     const l3Strategies = branchStrategies.filter((s) => s.level === 3);
+    
+    console.log('项目评估看板 - 策略统计:', {
+      branchStrategies: branchStrategies.length,
+      l3Strategies: l3Strategies.length,
+      l3StrategyNames: l3Strategies.map(s => s.name),
+    });
     const tasksPerStrategy =
       l3Strategies.length > 0
         ? l3Strategies.map((s) => branchTasks.filter((t) => t.parentId === s.id).length)
