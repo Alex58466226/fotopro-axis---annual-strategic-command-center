@@ -125,7 +125,7 @@ export const AIChatModal: React.FC<AIChatModalProps> = ({
       const assistantMessage: Message = {
         id: `msg-${Date.now()}-assistant`,
         role: 'assistant',
-        content: data.content || '抱歉，我暂时无法回答这个问题。',
+        content: data.content || (isLoading ? '正在思考...' : '抱歉，AI 服务暂时不可用。请检查 API 配置或稍后重试。'),
         timestamp: new Date(),
         suggestions: data.suggestions,
         reportItems: data.reportItems,

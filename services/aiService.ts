@@ -112,18 +112,20 @@ const callOpenAICompatibleAPI = async (
       },
       body: JSON.stringify({
         model,
-        messages: [
-          {
-            role: 'system',
-            content: '你是一个专业的项目管理助手。请严格按照要求返回 JSON 格式的数据。'
-          },
-          {
-            role: 'user',
-            content: prompt + (responseSchema ? '\n\n请严格按照以下 JSON Schema 格式返回：' + JSON.stringify(responseSchema, null, 2) : '')
-          }
-        ],
+        messages: isChatMode
+          ? [{ role: 'user', content: prompt }]
+          : [
+              {
+                role: 'system',
+                content: '你是一个专业的项目管理助手。请严格按照要求返回 JSON 格式的数据。'
+              },
+              {
+                role: 'user',
+                content: prompt + (responseSchema ? '\n\n请严格按照以下 JSON Schema 格式返回：' + JSON.stringify(responseSchema, null, 2) : '')
+              }
+            ],
         response_format: responseSchema ? { type: 'json_object' } : undefined,
-        temperature: 0.7
+        temperature: isChatMode ? 0.8 : 0.7 // 聊天模式使用稍高的温度，让回答更自然
       })
     });
 
