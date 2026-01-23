@@ -22,7 +22,12 @@ export async function loadStrategies(): Promise<StrategyNode[]> {
       return [];
     }
 
-    if (!data) return [];
+    if (!data) {
+      console.log('Supabase strategies 表为空，返回空数组');
+      return [];
+    }
+
+    console.log('从 Supabase 查询到', data.length, '条策略记录');
 
     // 转换数据格式
     return data.map((row: any) => ({

@@ -452,11 +452,45 @@ const App: React.FC = () => {
     };
     checkAuth();
 
+    // 清理旧的 localStorage 数据（避免读取测试数据）
+    const clearOldLocalStorage = () => {
+      try {
+        const keysToRemove = [
+          'fotopro_axis_v2_strategies',
+          'fotopro_axis_v2_tasks',
+          'fotopro_axis_v2_logs',
+          'fotopro_axis_v2_user',
+          'fotopro_axis_v2_users_db',
+          'fotopro_axis_data_version',
+        ];
+        let clearedCount = 0;
+        keysToRemove.forEach(key => {
+          if (localStorage.getItem(key)) {
+            localStorage.removeItem(key);
+            clearedCount++;
+            console.log('已清理 localStorage:', key);
+          }
+        });
+        if (clearedCount > 0) {
+          console.log(`已清理 ${clearedCount} 个 localStorage 键`);
+        }
+      } catch (error) {
+        console.warn('清理 localStorage 失败:', error);
+      }
+    };
+
     // 加载所有数据（从 Supabase）
     const loadAllData = async () => {
       try {
+        // 首先清理旧的 localStorage 数据
+        clearOldLocalStorage();
+
         // 加载策略数据
         const strategiesData = await loadStrategies();
+        console.log('从 Supabase 加载的策略数据:', strategiesData?.length || 0, '条');
+        if (strategiesData && strategiesData.length > 0) {
+          console.log('策略数据示例:', strategiesData.slice(0, 2).map(s => ({ id: s.id, name: s.name })));
+        }
         setStrategies(strategiesData || []);
         
         // 如果加载到数据且当前没有选中节点，设置默认选中的节点（第一个 L1 策略）
@@ -476,6 +510,10 @@ const App: React.FC = () => {
 
         // 加载任务数据
         const tasksData = await loadTasks();
+        console.log('从 Supabase 加载的任务数据:', tasksData?.length || 0, '条');
+        if (tasksData && tasksData.length > 0) {
+          console.log('任务数据示例:', tasksData.slice(0, 2).map(t => ({ id: t.id, text: t.text })));
+        }
         setTasks(tasksData || []);
 
         // 加载审计日志
