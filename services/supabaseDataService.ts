@@ -191,7 +191,7 @@ export async function loadTasks(): Promise<Task[]> {
       channel: row.channel || '',
       priority: row.priority || 'P2',
       reviewer: row.reviewer || '',
-      score: row.score || undefined,
+      score: row.score !== null && row.score !== undefined ? row.score : undefined,
       reviewComment: row.review_comment || '',
       notes: row.notes || '',
       reports: reportsMap.get(row.id) || [],
