@@ -40,7 +40,7 @@ interface TaskListProps {
   onAiAssist: () => void;
   onSelectSuggestion: (suggestion: TaskSuggestion) => void;
   suggestions: TaskSuggestion[];
-  onLoadSuggestions: () => void;
+  onLoadSuggestions: (customPrompt?: string) => void; // 更新：支持自定义提示词
   onTasksReorder?: (tasks: Task[]) => void; // 新增：拖拽排序回调
   onFullscreen?: () => void; // 新增：全屏回调
 }
@@ -91,7 +91,16 @@ export const TaskList: React.FC<TaskListProps> = ({
   onFullscreen,
 }) => {
   const [showSuggestions, setShowSuggestions] = React.useState(false);
+  const [showChatInput, setShowChatInput] = React.useState(false);
+  const [chatPrompt, setChatPrompt] = React.useState('');
   const suggestionsRef = React.useRef<HTMLDivElement>(null);
+  const chatInputRef = React.useRef<HTMLTextAreaElement>(null);
+
+  React.useEffect(() => {
+    if (showChatInput) {
+      setTimeout(() => chatInputRef.current?.focus(), 100);
+    }
+  }, [showChatInput]);
 
   // 拖拽传感器配置
   const sensors = useSensors(
@@ -220,6 +229,7 @@ export const TaskList: React.FC<TaskListProps> = ({
                         onClick={e => {
                           e.stopPropagation();
                           setShowSuggestions(false);
+                          setShowChatInput(false);
                         }}
                         className="text-[#9B9A97] hover:text-[#37352F] transition-colors"
                       >
@@ -228,6 +238,70 @@ export const TaskList: React.FC<TaskListProps> = ({
                     </div>
                     <p className="text-[10px] text-[#787774] mt-1">基于当前策略和周报生成</p>
                   </div>
+                  {/* 聊天输入区域 */}
+                  {showChatInput ? (
+                    <div className="p-3 border-b border-[#E9E9E7] bg-white space-y-2">
+                      <textarea
+                        ref={chatInputRef}
+                        value={chatPrompt}
+                        onChange={(e) => setChatPrompt(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            onLoadSuggestions(chatPrompt.trim() || undefined);
+                            setChatPrompt('');
+                            setShowChatInput(false);
+                          }
+                          if (e.key === 'Escape') {
+                            setShowChatInput(false);
+                            setChatPrompt('');
+                          }
+                        }}
+                        placeholder="输入你的需求，例如：&#10;• 生成更具体的执行步骤&#10;• 重点关注风险控制相关任务&#10;• 增加数据分析类任务"
+                        className="w-full p-2 text-[10px] text-[#37352F] bg-[#F7F6F3] border border-[#E9E9E7] rounded-lg outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 resize-none"
+                        rows={3}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onLoadSuggestions(chatPrompt.trim() || undefined);
+                            setChatPrompt('');
+                            setShowChatInput(false);
+                          }}
+                          disabled={isAiLoading}
+                          className="flex-1 px-2 py-1.5 bg-indigo-500 text-white rounded-lg text-[10px] font-bold hover:bg-indigo-600 disabled:opacity-50 transition-all flex items-center justify-center gap-1"
+                        >
+                          <Icon name="sparkles" size={10} /> 生成
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowChatInput(false);
+                            setChatPrompt('');
+                          }}
+                          className="px-2 py-1.5 bg-[#E9E9E7] text-[#787774] rounded-lg text-[10px] font-bold hover:bg-[#D9D9D7] transition-all"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-2 border-b border-[#E9E9E7] bg-white">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowChatInput(true);
+                        }}
+                        className="w-full px-2 py-1.5 text-[10px] text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center justify-center gap-1 border border-indigo-200"
+                      >
+                        <Icon name="sparkles" size={10} /> 输入需求微调建议
+                      </button>
+                    </div>
+                  )}
                   <div className="p-2 space-y-1">
                     {suggestions.length === 0 ? (
                       <div className="p-4 text-center text-[#9B9A97] text-xs">

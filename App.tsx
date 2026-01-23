@@ -1304,7 +1304,7 @@ const App: React.FC = () => {
   };
 
   // 加载任务建议（基于策略和报告）
-  const loadTaskSuggestions = async () => {
+  const loadTaskSuggestions = async (customPrompt?: string) => {
     setIsAiLoading(true);
     try {
       // 收集当前策略下的所有任务和报告
@@ -1338,7 +1338,8 @@ const App: React.FC = () => {
         activeNode.name,
         context,
         currentTasks,
-        allReports
+        allReports,
+        customPrompt
       );
 
       if (suggestions && suggestions.length > 0) {
@@ -1397,7 +1398,16 @@ const App: React.FC = () => {
     showToast('success', '周报条目已加载');
   };
 
-  const openReportModal = async () => { setReportModal({ isOpen: true, items: [], isGenerating: true }); const generatedItems = await generateWeeklyReport(activeNode.name, activeTasks, stats); const itemsWithId = generatedItems.map(item => ({...item, id: generateId('rpt')})); setReportModal({ isOpen: true, items: itemsWithId, isGenerating: false }); addLog('REPORT', 'SYSTEM', activeNode.name, 'Generated AI Weekly Report'); };
+  const openReportModal = async (customPrompt?: string) => { setReportModal({ isOpen: true, items: [], isGenerating: true }); const generatedItems = await generateWeeklyReport(activeNode.name, activeTasks, stats, customPrompt); const itemsWithId = generatedItems.map(item => ({...item, id: generateId('rpt')})); setReportModal({ isOpen: true, items: itemsWithId, isGenerating: false }); addLog('REPORT', 'SYSTEM', activeNode.name, 'Generated AI Weekly Report'); };
+  
+  // 重新生成周报（支持自定义提示词）
+  const regenerateReport = async (customPrompt?: string) => {
+    setReportModal(prev => ({ ...prev, isGenerating: true }));
+    const generatedItems = await generateWeeklyReport(activeNode.name, activeTasks, stats, customPrompt);
+    const itemsWithId = generatedItems.map(item => ({...item, id: generateId('rpt')}));
+    setReportModal(prev => ({ isOpen: true, items: itemsWithId, isGenerating: false }));
+    addLog('REPORT', 'SYSTEM', activeNode.name, 'Regenerated AI Weekly Report with custom prompt');
+  };
   const addReportItem = () => { setReportModal(prev => ({ ...prev, items: [...prev.items, { id: generateId('rpt'), type: '进展', content: '' }] })); };
   const deleteReportItem = (id: string) => { setReportModal(prev => ({ ...prev, items: prev.items.filter(i => i.id !== id) })); };
   const updateReportItem = (id: string, field: keyof ReportItem, value: string) => { setReportModal(prev => ({ ...prev, items: prev.items.map(i => i.id === id ? { ...i, [field]: value } : i) })); };

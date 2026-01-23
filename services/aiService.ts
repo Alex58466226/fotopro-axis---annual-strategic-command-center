@@ -263,7 +263,7 @@ export const generateTaskSuggestions = async (
     ? reports.map((r: any) => `[${r.type}] ${r.content}`).join('\n')
     : '暂无报告';
 
-  const prompt = `你是一位资深的项目经理。请根据以下信息，为策略 "${strategyName}" 生成 5-8 个具体的、可立即执行的下一步任务建议。
+  const basePrompt = `你是一位资深的项目经理。请根据以下信息，为策略 "${strategyName}" 生成 5-8 个具体的、可立即执行的下一步任务建议。
 
 策略上下文: ${strategyContext}
 
@@ -280,10 +280,13 @@ ${reportSummary}
 
 每个建议包含：
 - title: 任务标题（简洁明确）
-- description: 任务描述（一句话说明）
+- description: 任务描述（一句话说明）`;
 
-请以 JSON 数组格式返回，格式：
-[{"title": "...", "description": "..."}, ...]`;
+  const customInstructions = customPrompt 
+    ? `\n\n额外要求：${customPrompt}\n请根据以上额外要求调整生成的任务建议。`
+    : '';
+
+  const prompt = `${basePrompt}${customInstructions}\n\n请以 JSON 数组格式返回，格式：\n[{"title": "...", "description": "..."}, ...]`;
 
   const responseSchema = {
     type: 'array',
@@ -539,7 +542,8 @@ JSON 格式示例：
 export const generateWeeklyReport = async (
   strategyName: string,
   tasks: any[],
-  stats: { total: number; completed: number; rate: number; timeUsedRate: number }
+  stats: { total: number; completed: number; rate: number; timeUsedRate: number },
+  customPrompt?: string // 新增：自定义提示词，用于微调生成
 ) => {
   const config = getAIConfig();
   
@@ -554,7 +558,7 @@ export const generateWeeklyReport = async (
     `- [${t.priority}] ${t.text} (状态: ${t.status === 'completed' ? '已完成' : '进行中'}, 负责人: ${t.owner || '未分配'})`
   ).join('\n');
 
-  const prompt = `
+  const basePrompt = `
     你是一位资深的项目经理。请根据以下策略项目的当前状态，生成一份专业的周工作汇报。
     
     策略名称: "${strategyName}"
@@ -568,10 +572,13 @@ export const generateWeeklyReport = async (
     1. type: 必须是 ["进展", "问题", "计划", "结果", "复盘"] 中的一个。
     2. content: 具体内容，语言简练专业。
 
-    请生成 3-6 条核心汇报内容。
-    请以 JSON 数组格式返回，格式示例：
-    [{"type": "进展", "content": "..."}, {"type": "问题", "content": "..."}]
-  `;
+    请生成 3-6 条核心汇报内容。`;
+
+  const customInstructions = customPrompt 
+    ? `\n\n额外要求：${customPrompt}\n请根据以上额外要求调整生成的周报内容。`
+    : '';
+
+  const prompt = `${basePrompt}${customInstructions}\n\n请以 JSON 数组格式返回，格式示例：\n[{"type": "进展", "content": "..."}, {"type": "问题", "content": "..."}]`;
 
   const responseSchema = {
     type: 'array',
