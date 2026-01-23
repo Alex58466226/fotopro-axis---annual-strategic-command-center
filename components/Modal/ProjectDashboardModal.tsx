@@ -307,6 +307,52 @@ export const ProjectDashboardModal: React.FC<ProjectDashboardModalProps> = ({
     };
   }, [activeNode, strategies, tasks, activeBranchIds]);
 
+  // 提取用于空状态判断的数据
+  const branchTasks = useMemo(() => {
+    const getAllDescendantIds = (nodeId: string): string[] => {
+      const ids = [nodeId];
+      strategies.forEach(s => {
+        if (s.parentId === nodeId) {
+          ids.push(...getAllDescendantIds(s.id));
+        }
+      });
+      return ids;
+    };
+    const relatedNodeIds = getAllDescendantIds(activeNode.id);
+    return tasks.filter((t) => {
+      if (t.parentId && relatedNodeIds.includes(t.parentId)) return true;
+      if (t.rootId && relatedNodeIds.includes(t.rootId)) return true;
+      if (t.parentId && !t.rootId) {
+        const parentStrategy = strategies.find((s) => s.id === t.parentId);
+        if (parentStrategy) {
+          let current = parentStrategy;
+          while (current.parentId) {
+            if (relatedNodeIds.includes(current.id)) return true;
+            const parent = strategies.find((s) => s.id === current.parentId);
+            if (parent) current = parent;
+            else break;
+          }
+          if (relatedNodeIds.includes(current.id)) return true;
+        }
+      }
+      return false;
+    });
+  }, [activeNode, strategies, tasks]);
+
+  const branchStrategies = useMemo(() => {
+    const getAllDescendantIds = (nodeId: string): string[] => {
+      const ids = [nodeId];
+      strategies.forEach(s => {
+        if (s.parentId === nodeId) {
+          ids.push(...getAllDescendantIds(s.id));
+        }
+      });
+      return ids;
+    };
+    const relatedNodeIds = getAllDescendantIds(activeNode.id);
+    return strategies.filter((s) => relatedNodeIds.includes(s.id));
+  }, [activeNode, strategies]);
+
   // 导出报告
   const handleExport = () => {
     const reportContent = `
@@ -374,6 +420,20 @@ ${metrics.riskTasks.map((t, idx) => `${idx + 1}. ${t.text} (得分: ${t.score ||
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+          {/* 空状态提示 */}
+          {branchTasks.length === 0 && branchStrategies.length <= 1 && (
+            <div className="mb-6 p-8 bg-slate-50 border border-slate-200 rounded-xl text-center">
+              <Icon name="info" size={48} className="text-slate-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-slate-700 mb-2">暂无数据</h3>
+              <p className="text-sm text-slate-500 mb-4">
+                当前策略 "{activeNode.name}" 下还没有任务数据
+              </p>
+              <p className="text-xs text-slate-400">
+                请先创建 L3 策略和任务，然后添加任务评分，即可查看项目评估数据
+              </p>
+            </div>
+          )}
+
           {/* 核心指标卡片 */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             {/* 任务得分 */}
