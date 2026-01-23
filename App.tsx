@@ -961,10 +961,13 @@ const App: React.FC = () => {
   const filterOptions = useMemo(() => {
       const owners = new Set<string>(); const channels = new Set<string>(); const products = new Set<string>(); const tags = new Set<string>();
       allBranchTasks.forEach(t => { if(t.owner) owners.add(t.owner); if(t.channel) channels.add(t.channel); if(t.product) products.add(t.product); });
-      const branchStrategies = strategies.filter(s => activeBranchIds.includes(s.id));
+      // 如果 activeNodeId 为空，使用所有策略；否则只使用当前分支的策略
+      const branchStrategies = activeNodeId 
+        ? strategies.filter(s => activeBranchIds.includes(s.id))
+        : strategies;
       branchStrategies.forEach(s => { if (s.owner) owners.add(s.owner); if (s.channel) channels.add(s.channel); if (s.product) products.add(s.product); if (s.tags) s.tags.forEach(t => tags.add(t)); });
       return { owners: Array.from(owners).sort(), channels: Array.from(channels).sort(), products: Array.from(products).sort(), tags: Array.from(tags).sort() };
-  }, [allBranchTasks, strategies, activeBranchIds]);
+  }, [allBranchTasks, strategies, activeBranchIds, activeNodeId]);
   
   // 收集所有已使用的标签（用于快捷选择）
   const allUsedTags = useMemo(() => {
