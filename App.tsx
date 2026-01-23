@@ -1162,9 +1162,9 @@ const App: React.FC = () => {
         priority: updatedTask.priority || task.priority || 'P2',
         notes: updatedTask.notes || task.notes || '',
         reports: updatedTask.reports || [],
-        reviewer: updatedTask.reviewer,
-        score: updatedTask.score,
-        reviewComment: updatedTask.reviewComment
+        reviewer: updatedTask.reviewer !== undefined ? updatedTask.reviewer : task.reviewer,
+        score: updatedTask.score !== undefined ? updatedTask.score : task.score,
+        reviewComment: updatedTask.reviewComment !== undefined ? updatedTask.reviewComment : task.reviewComment
       };
       
       const newTasks = prev.map(t => t.id === id ? finalTask : t);

@@ -219,7 +219,7 @@ export async function saveTasks(tasks: Task[]): Promise<{ success: boolean; erro
       channel: t.channel || '',
       priority: t.priority || 'P2',
       reviewer: t.reviewer || '',
-      score: t.score || null,
+      score: t.score !== undefined && t.score !== null ? t.score : null,
       review_comment: t.reviewComment || '',
       notes: t.notes || '',
     }));
