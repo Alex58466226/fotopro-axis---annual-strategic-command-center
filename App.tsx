@@ -1043,6 +1043,8 @@ const App: React.FC = () => {
           parentId: node.parentId || '', 
           tagsString: node.tags?.join(', ') || '', 
           metrics: node.metrics ? [...node.metrics] : [],
+          start: node.start || PROJECT_START,
+          end: node.end || PROJECT_END,
           reviewer: node.reviewer,
           score: node.score,
           reviewComment: node.reviewComment

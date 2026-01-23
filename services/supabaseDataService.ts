@@ -91,6 +91,9 @@ export async function saveStrategies(strategies: StrategyNode[]): Promise<{ succ
       tags: s.tags || [],
       description: s.description || '',
       metrics: Array.isArray(s.metrics) ? s.metrics : [],
+      reviewer: s.reviewer || null,
+      score: s.score !== undefined && s.score !== null ? s.score : null,
+      review_comment: s.reviewComment || null,
       created_by: session.user.id, // 添加创建者 ID
     }));
 
