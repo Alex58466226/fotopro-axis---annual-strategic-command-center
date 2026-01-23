@@ -940,6 +940,10 @@ const App: React.FC = () => {
     } as StrategyNode;
   }, [strategies, activeNodeId]);
   const getDescendantIds = (nodeId: string): string[] => {
+    // 如果 nodeId 为空，返回所有策略的ID（显示全部项目）
+    if (!nodeId) {
+      return strategies.map(s => s.id);
+    }
     const children = strategies.filter(s => s.parentId === nodeId);
     let ids = [nodeId];
     children.forEach(c => { ids = [...ids, ...getDescendantIds(c.id)]; });
@@ -947,8 +951,13 @@ const App: React.FC = () => {
   };
   const activeBranchIds = useMemo(() => getDescendantIds(activeNodeId), [activeNodeId, strategies]);
   const allBranchTasks = useMemo(() => {
+    // 如果 activeNodeId 为空，显示所有任务（全部项目）
+    if (!activeNodeId) {
+      return tasks.sort((a,b) => a.start.localeCompare(b.start));
+    }
+    // 否则只显示当前分支下的任务
     return tasks.filter(t => activeBranchIds.includes(t.parentId)).sort((a,b) => a.start.localeCompare(b.start));
-  }, [tasks, activeBranchIds]);
+  }, [tasks, activeBranchIds, activeNodeId]);
   const filterOptions = useMemo(() => {
       const owners = new Set<string>(); const channels = new Set<string>(); const products = new Set<string>(); const tags = new Set<string>();
       allBranchTasks.forEach(t => { if(t.owner) owners.add(t.owner); if(t.channel) channels.add(t.channel); if(t.product) products.add(t.product); });
