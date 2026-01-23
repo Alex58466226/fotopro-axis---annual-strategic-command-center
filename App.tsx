@@ -49,16 +49,6 @@ import {
 } from './services/supabaseDataService';
 import { supabase } from './services/supabaseClient';
 import {
-  STORAGE_KEYS,
-  saveToStorage,
-  loadFromStorage,
-  saveBatch,
-  removeFromStorage,
-  setDataVersion,
-  getDataVersion,
-  needsMigration,
-  createBackup,
-  validateData,
   type Validator
 } from './services/storageService';
 
@@ -333,11 +323,8 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
   
-  // Initialize users from LocalStorage or fall back to Mock users
-  const [users, setUsers] = useState<User[]>(() => {
-    const result = loadFromStorage<User[]>(STORAGE_KEYS.USERS_DB, MOCK_USERS, userValidator);
-    return result.success && result.data ? result.data : MOCK_USERS;
-  });
+  // Initialize users from Supabase (loaded in useEffect)
+  const [users, setUsers] = useState<User[]>([]);
 
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -1046,16 +1033,21 @@ const App: React.FC = () => {
     setTasks(prev => [...prev, newTask]); addLog('CREATE', 'TASK', '新任务', `Added task to ${activeNode.name}`);
   };
   // 处理数据导入
-  const handleImportData = (importedStrategies: StrategyNode[], importedTasks: Task[]) => {
+  const handleImportData = async (importedStrategies: StrategyNode[], importedTasks: Task[]) => {
     // 直接替换为导入的数据（importService 已经处理了合并策略）
     setStrategies(importedStrategies);
     setTasks(importedTasks);
 
-    // 保存到 localStorage
-    saveBatch([
-      { key: STORAGE_KEYS.STRATEGY, data: importedStrategies },
-      { key: STORAGE_KEYS.TASKS, data: importedTasks },
-    ]);
+    // 保存到 Supabase（不再使用 localStorage）
+    const strategiesResult = await saveStrategies(importedStrategies);
+    const tasksResult = await saveTasks(importedTasks);
+    
+    if (!strategiesResult.success) {
+      showToast('error', `保存策略数据失败: ${strategiesResult.error}`);
+    }
+    if (!tasksResult.success) {
+      showToast('error', `保存任务数据失败: ${tasksResult.error}`);
+    }
 
     // 记录审计日志
     addLog('CREATE', 'SYSTEM', 'Data Import', `导入了 ${importedStrategies.length} 个策略和 ${importedTasks.length} 个任务`);
@@ -1139,13 +1131,16 @@ const App: React.FC = () => {
       
       const newTasks = prev.map(t => t.id === id ? finalTask : t);
       
-      // 立即保存到 localStorage
-      const saveResult = saveToStorage(STORAGE_KEYS.TASKS, newTasks, taskValidator);
-      if (!saveResult.success) {
-        console.error('立即保存任务失败:', saveResult.error);
-        setStorageError(`保存任务失败: ${saveResult.error}`);
-        setTimeout(() => setStorageError(null), 3000);
-      }
+      // 立即保存到 Supabase（不再使用 localStorage）
+      // 注意：这里不 await，避免阻塞 UI，保存会在 useEffect 中自动触发
+      saveTasks(newTasks).then(result => {
+        if (!result.success) {
+          console.error('立即保存任务失败:', result.error);
+          setStorageError(`保存任务失败: ${result.error}`);
+          setTimeout(() => setStorageError(null), 3000);
+          showToast('error', `保存任务失败: ${result.error}`);
+        }
+      });
       
       return newTasks;
     });
