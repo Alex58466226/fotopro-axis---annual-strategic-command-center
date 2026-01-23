@@ -1386,6 +1386,9 @@ const App: React.FC = () => {
     showToast('success', `任务 "${suggestion.title}" 已创建`);
   };
 
+  // AI 聊天中的任务建议选择（别名）
+  const handleAISuggestionSelect = handleSelectSuggestion;
+
   // 处理 AI 聊天中的周报条目使用
   const handleAIReportItemsUse = (items: Array<{ type: '进展' | '问题' | '计划' | '结果' | '复盘'; content: string }>) => {
     const itemsWithId = items.map(item => ({...item, id: generateId('rpt')}));
