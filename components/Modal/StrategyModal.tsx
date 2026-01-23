@@ -1,6 +1,8 @@
 import React from 'react';
 import Icon from '../Icon';
+import { DatePicker } from '../DatePicker/DatePicker';
 import { StrategyNode, Metric, Level, ReportTag } from '../../types';
+import { PROJECT_START, PROJECT_END } from '../../constants';
 
 const TAG_STYLES: Record<ReportTag, string> = {
   '进展': 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -266,18 +268,22 @@ export const StrategyModal: React.FC<StrategyModalProps> = ({
               <Icon name="calendar" size={12} /> Execution Cycle
             </label>
             <div className="flex items-center gap-4">
-              <input
-                type="date"
-                className="flex-1 p-3 bg-white border border-orange-200/50 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-orange-500"
+              <DatePicker
                 value={data.start || ''}
-                onChange={e => onDataChange({ ...data, start: e.target.value })}
+                onChange={(date) => onDataChange({ ...data, start: date })}
+                placeholder="选择开始日期"
+                minDate={PROJECT_START}
+                maxDate={data.end || PROJECT_END}
+                className="flex-1"
               />
               <span className="text-orange-300 font-black">~</span>
-              <input
-                type="date"
-                className="flex-1 p-3 bg-white border border-orange-200/50 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-orange-500"
+              <DatePicker
                 value={data.end || ''}
-                onChange={e => onDataChange({ ...data, end: e.target.value })}
+                onChange={(date) => onDataChange({ ...data, end: date })}
+                placeholder="选择结束日期"
+                minDate={data.start || PROJECT_START}
+                maxDate={PROJECT_END}
+                className="flex-1"
               />
             </div>
           </div>
