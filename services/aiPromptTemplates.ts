@@ -98,6 +98,30 @@ export const ANSWER_TEMPLATES = {
 };
 
 /**
+ * 判断是否为简单场景（需要简短回答）
+ */
+const isSimpleScenario = (message: string): boolean => {
+  const lowerMessage = message.toLowerCase().trim();
+  const simplePatterns = [
+    /^(你好|hi|hello|hey|哈喽|嗨)/i,
+    /^(谢谢|thanks|thank you|感谢)/i,
+    /^(再见|bye|拜拜|88)/i,
+    /^(好的|ok|okay|收到|明白)/i,
+    /^(是|对|没错|是的)/i,
+    /^(不|不是|不对|否)/i,
+    /^[？?]$/, // 单个问号
+    /^(嗯|哦|啊|额)/i,
+  ];
+  
+  // 如果消息很短（少于10个字符）且匹配简单模式，认为是简单场景
+  if (message.length < 10) {
+    return simplePatterns.some(pattern => pattern.test(lowerMessage));
+  }
+  
+  return false;
+};
+
+/**
  * 构建增强的系统提示词
  */
 export const buildEnhancedSystemPrompt = (
@@ -106,6 +130,13 @@ export const buildEnhancedSystemPrompt = (
   taskSummary: string,
   statsInfo: string
 ): string => {
+  // 判断是否为简单场景
+  if (isSimpleScenario(userMessage)) {
+    return `你是一个友好的项目管理助手。用户说："${userMessage}"
+
+请给出简短、友好的回应（1-2句话即可），不要长篇大论。如果是打招呼，简单回应即可。`;
+  }
+
   // 判断用户意图
   const lowerMessage = userMessage.toLowerCase();
   const isQuestion = lowerMessage.includes('？') || lowerMessage.includes('?') || 
@@ -193,11 +224,16 @@ ${userMessage}
   }
 
   systemPrompt += `
-## 回答格式
+## 回答格式要求
 - 使用中文回答
 - 语言专业但易懂
+- **根据问题复杂度调整回答长度**：
+  - 简单问题：1-3句话
+  - 一般问题：3-5句话或简短段落
+  - 复杂问题：可以详细展开
 - 如果涉及 JSON 数据，在回答末尾添加 JSON 代码块
 - 始终提供有用的信息，不要只说"无法回答"
+- **避免过度展开**：如果用户只是简单询问，不要给出长篇大论
 `;
 
   return systemPrompt;
