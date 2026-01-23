@@ -75,6 +75,11 @@ export interface StrategyNode {
   product?: string;
   tags?: string[];
   description?: string; // 补充说明
+  
+  // v2.7 Strategy Review & Scoring
+  reviewer?: string;      // 审核人
+  score?: number;         // 评分 (0-100)
+  reviewComment?: string; // 审核评语
 }
 
 // v2.4 Authentication & Logging

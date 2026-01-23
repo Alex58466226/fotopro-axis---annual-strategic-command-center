@@ -281,6 +281,56 @@ export const StrategyModal: React.FC<StrategyModalProps> = ({
               />
             </div>
           </div>
+
+          {/* Review & Scoring Section */}
+          <div className="p-4 bg-purple-50 rounded-xl border border-purple-100 space-y-3">
+            <div className="flex justify-between items-center">
+              <label className="text-[9px] font-black text-purple-400 uppercase tracking-widest ml-1 flex items-center gap-1">
+                <Icon name="check" size={10} /> Review & Scoring
+              </label>
+              <div className="text-[9px] text-purple-300 font-bold uppercase">
+                Auditor Only
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2 space-y-1">
+                <label className="text-[8px] font-bold text-purple-300 uppercase ml-1">
+                  Reviewer
+                </label>
+                <input
+                  className="w-full p-2.5 bg-white border border-purple-200/50 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-purple-500 placeholder-purple-200"
+                  placeholder="审核人姓名"
+                  value={data.reviewer || ''}
+                  onChange={e => onDataChange({ ...data, reviewer: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[8px] font-bold text-purple-300 uppercase ml-1">
+                  Score (0-100)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  className="w-full p-2.5 bg-white border border-purple-200/50 rounded-lg text-xs font-black text-purple-600 outline-none focus:border-purple-500 text-center placeholder-purple-200"
+                  placeholder="-"
+                  value={data.score !== undefined ? data.score : ''}
+                  onChange={e => onDataChange({ ...data, score: e.target.value ? parseInt(e.target.value) : undefined })}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[8px] font-bold text-purple-300 uppercase ml-1">
+                Comments
+              </label>
+              <textarea
+                className="w-full p-2.5 bg-white border border-purple-200/50 rounded-lg text-xs font-medium text-slate-600 outline-none focus:border-purple-500 resize-none h-16 placeholder-purple-200"
+                placeholder="审核评语..."
+                value={data.reviewComment || ''}
+                onChange={e => onDataChange({ ...data, reviewComment: e.target.value })}
+              />
+            </div>
+          </div>
         </div>
         <div className="p-8 border-t border-slate-100 bg-slate-50 flex gap-4">
           <button

@@ -1024,7 +1024,7 @@ const App: React.FC = () => {
     else { const node = targetNode || activeNode; setModal({ isOpen: true, mode: 'edit', data: { ...node, parentId: node.parentId || '', tagsString: node.tags?.join(', ') || '', metrics: node.metrics ? [...node.metrics] : [] } }); }
   };
   const handleSaveModal = () => {
-    const { name, level, parentId, owner, group, channel, product, tagsString, start, end, id, metrics } = modal.data;
+    const { name, level, parentId, owner, group, channel, product, tagsString, start, end, id, metrics, reviewer, score, reviewComment } = modal.data;
     if (!name) {
       showToast('error', '策略名称不能为空');
       return;
@@ -1036,11 +1036,46 @@ const App: React.FC = () => {
     const tagsArray = tagsString ? tagsString.split(/[，,;；]/).map(t => t.trim()).filter(Boolean) : [];
     const cleanMetrics = (metrics || []).filter(m => m.label && m.value);
     if (modal.mode === 'create') {
-      const newNode: StrategyNode = { id: generateId(`L${level}`), level: level as Level, name: name!, parentId: parentId || null, owner: owner || currentUser?.username || '待定', group: group || '', channel: channel || '', product: product || '', tags: tagsArray, start: start || TODAY_STR, end: end || PROJECT_END, metrics: cleanMetrics, status: 'active' };
-      setStrategies(prev => [...prev, newNode]); setActiveNodeId(newNode.id); addLog('CREATE', 'STRATEGY', newNode.name, `Created Level ${level} strategy`);
+      const newNode: StrategyNode = { 
+        id: generateId(`L${level}`), 
+        level: level as Level, 
+        name: name!, 
+        parentId: parentId || null, 
+        owner: owner || currentUser?.username || '待定', 
+        group: group || '', 
+        channel: channel || '', 
+        product: product || '', 
+        tags: tagsArray, 
+        start: start || TODAY_STR, 
+        end: end || PROJECT_END, 
+        metrics: cleanMetrics, 
+        status: 'active',
+        reviewer: reviewer,
+        score: score,
+        reviewComment: reviewComment
+      };
+      setStrategies(prev => [...prev, newNode]); 
+      setActiveNodeId(newNode.id); 
+      addLog('CREATE', 'STRATEGY', newNode.name, `Created Level ${level} strategy`);
     } else {
       if (!id) return;
-      setStrategies(prev => prev.map(s => s.id === id ? { ...s, name: name!, parentId: parentId || null, owner: owner || '', group: group || '', channel: channel || '', product: product || '', tags: tagsArray, metrics: cleanMetrics, start: start!, end: end! } : s)); addLog('UPDATE', 'STRATEGY', name!, 'Updated strategy details');
+      setStrategies(prev => prev.map(s => s.id === id ? { 
+        ...s, 
+        name: name!, 
+        parentId: parentId || null, 
+        owner: owner || '', 
+        group: group || '', 
+        channel: channel || '', 
+        product: product || '', 
+        tags: tagsArray, 
+        metrics: cleanMetrics, 
+        start: start!, 
+        end: end!,
+        reviewer: reviewer,
+        score: score,
+        reviewComment: reviewComment
+      } : s)); 
+      addLog('UPDATE', 'STRATEGY', name!, 'Updated strategy details');
     }
     setModal({ ...modal, isOpen: false });
   };

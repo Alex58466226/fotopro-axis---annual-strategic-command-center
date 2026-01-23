@@ -44,6 +44,9 @@ export async function loadStrategies(): Promise<StrategyNode[]> {
       tags: Array.isArray(row.tags) ? row.tags : [],
       description: row.description || '',
       metrics: Array.isArray(row.metrics) ? row.metrics : [],
+      reviewer: row.reviewer || undefined,
+      score: row.score !== null && row.score !== undefined ? row.score : undefined,
+      reviewComment: row.review_comment || undefined,
     }));
   } catch (error) {
     console.error('加载策略数据异常:', error);
