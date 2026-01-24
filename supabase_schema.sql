@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   score INTEGER,
   review_comment TEXT,
   notes TEXT,
+  "order" INTEGER, -- 排序顺序（用于拖拽排序）
   created_by UUID REFERENCES auth.users(id),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
