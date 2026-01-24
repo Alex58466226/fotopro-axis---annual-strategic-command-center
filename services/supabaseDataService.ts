@@ -213,12 +213,66 @@ export async function saveTasks(tasks: Task[]): Promise<{ success: boolean; erro
       return { success: true };
     }
 
+    // 先加载所有策略，用于验证和查找 root_id
+    const { data: allStrategies, error: strategiesError } = await supabase
+      .from('strategies')
+      .select('id, parent_id, level');
+
+    if (strategiesError) {
+      console.error('加载策略列表失败:', strategiesError);
+      return { success: false, error: `加载策略列表失败: ${strategiesError.message}` };
+    }
+
+    const strategyIds = new Set(allStrategies?.map(s => s.id) || []);
+    const strategyMap = new Map(allStrategies?.map(s => [s.id, s]) || []);
+
+    // 辅助函数：向上查找 L1 策略
+    const findL1Strategy = (strategyId: string): string | null => {
+      const strategy = strategyMap.get(strategyId);
+      if (!strategy) return null;
+      
+      if (strategy.level === 1) {
+        return strategy.id;
+      }
+      
+      if (strategy.parent_id) {
+        return findL1Strategy(strategy.parent_id);
+      }
+      
+      return null;
+    };
+
+    // 辅助函数：查找有效的 root_id
+    const findValidRootId = (task: Task): string | null => {
+      // 如果 rootId 存在且是有效的策略 ID，直接使用
+      if (task.rootId && strategyIds.has(task.rootId)) {
+        return task.rootId;
+      }
+      
+      // 如果 parentId 是策略 ID，向上查找 L1 策略
+      if (task.parentId && strategyIds.has(task.parentId)) {
+        const l1Id = findL1Strategy(task.parentId);
+        if (l1Id) return l1Id;
+      }
+      
+      // 如果都找不到，返回 null
+      return null;
+    };
+
     // 准备任务数据（不包含 reports）
-    const rows = tasks.map(t => ({
-      id: t.id,
-      parent_id: t.parentId,
-      root_id: t.rootId || t.parentId,
-      text: t.text,
+    const rows = tasks.map(t => {
+      const validRootId = findValidRootId(t);
+      
+      if (!validRootId) {
+        console.warn(`任务 ${t.id} (${t.text}) 无法找到有效的 root_id，跳过保存`);
+        return null;
+      }
+
+      return {
+        id: t.id,
+        parent_id: t.parentId,
+        root_id: validRootId,
+        text: t.text,
       status: t.status,
       progress: t.progress || 0,
       priority: t.priority || 'P2',
@@ -233,7 +287,8 @@ export async function saveTasks(tasks: Task[]): Promise<{ success: boolean; erro
       notes: t.notes || null,
       // order 字段：如果未定义，不包含该字段
       ...(t.order !== null && t.order !== undefined ? { order: t.order } : {}),
-    }));
+      };
+    }).filter((row): row is NonNullable<typeof row> => row !== null);
 
     // 保存任务数据
     const { error: tasksError } = await supabase
