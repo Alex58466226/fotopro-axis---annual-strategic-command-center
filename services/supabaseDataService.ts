@@ -209,7 +209,8 @@ export async function saveTasks(tasks: Task[]): Promise<{ success: boolean; erro
         content: r.content,
         timestamp: r.timestamp,
       })),
-      order: t.order !== null && t.order !== undefined ? t.order : null,
+      // order 字段：如果未定义，设置为 null（允许数据库使用默认值）
+      ...(t.order !== null && t.order !== undefined ? { order: t.order } : {}),
     }));
 
     const { error } = await supabase
