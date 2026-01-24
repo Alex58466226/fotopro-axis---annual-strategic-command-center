@@ -72,6 +72,8 @@ export async function loginWithSupabase(
       password: '', // 不再存储密码
       role: (profile?.role as 'Admin' | 'User' | 'Viewer') || 'User',
       avatarColor: profile?.avatar_color || AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
+      displayName: profile?.display_name || profile?.username || username, // 显示名称，默认使用 username
+      email: profile?.email || data.user.email || undefined, // 邮箱
     };
 
     return {
@@ -102,7 +104,9 @@ export interface RegisterResult {
 export async function registerWithSupabase(
   username: string,
   password: string,
-  confirmPassword: string
+  confirmPassword: string,
+  displayName?: string, // 显示名称（可选）
+  email?: string // 注册邮箱（可选，与登录用户名分开）
 ): Promise<RegisterResult> {
   if (!username.trim() || !password.trim()) {
     return {
@@ -119,7 +123,7 @@ export async function registerWithSupabase(
   }
 
   // 检查用户名是否已存在
-  const email = username.includes('@') ? username : `${username}@fotopro.local`;
+  const loginEmail = email || (username.includes('@') ? username : `${username}@fotopro.local`);
   const { data: existingUsers } = await supabase
     .from('profiles')
     .select('username')
@@ -134,9 +138,9 @@ export async function registerWithSupabase(
   }
 
   try {
-    // 使用 Supabase Auth 注册
+    // 使用 Supabase Auth 注册（使用邮箱作为登录标识）
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: loginEmail,
       password,
     });
 
@@ -160,6 +164,8 @@ export async function registerWithSupabase(
       .insert({
         id: data.user.id,
         username: username.trim(),
+        display_name: displayName?.trim() || username.trim(), // 显示名称，默认使用 username
+        email: email?.trim() || undefined, // 注册邮箱
         role,
         avatar_color: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
       });
@@ -176,6 +182,8 @@ export async function registerWithSupabase(
       password: '', // 不再存储密码
       role,
       avatarColor: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
+      displayName: displayName?.trim() || username.trim(), // 显示名称
+      email: email?.trim() || undefined, // 注册邮箱
     };
 
     return {

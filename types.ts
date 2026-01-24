@@ -85,10 +85,12 @@ export interface StrategyNode {
 // v2.4 Authentication & Logging
 export interface User {
   id: string;
-  username: string;
+  username: string; // 登录用户名（唯一标识）
   password: string; // In a real app, this would be hashed
   role: 'Admin' | 'User' | 'Viewer';
   avatarColor: string;
+  displayName?: string; // 显示名称（用于 owner 字段，可自定义）
+  email?: string; // 注册邮箱（与登录用户名分开）
 }
 
 export interface AuditLog {

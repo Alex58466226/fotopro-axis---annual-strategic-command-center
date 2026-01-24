@@ -334,7 +334,9 @@ const App: React.FC = () => {
   const [registerData, setRegisterData] = useState({
       username: '',
       password: '',
-      confirmPassword: ''
+      confirmPassword: '',
+      displayName: '', // 显示名称（用于 owner 字段）
+      email: '' // 注册邮箱（与登录用户名分开）
   });
   
   // --- Admin User Management State ---
@@ -687,7 +689,9 @@ const App: React.FC = () => {
     const result = await registerWithSupabase(
       registerData.username,
       registerData.password,
-      registerData.confirmPassword
+      registerData.confirmPassword,
+      registerData.displayName || undefined, // 显示名称（可选）
+      registerData.email || undefined // 注册邮箱（可选）
     );
 
     if (result.success && result.user) {
@@ -725,7 +729,7 @@ const App: React.FC = () => {
       // 保存日志到 Supabase
       await saveAuditLog(registerLog);
 
-      setRegisterData({ username: '', password: '', confirmPassword: '' });
+      setRegisterData({ username: '', password: '', confirmPassword: '', displayName: '', email: '' });
       setLoginError('');
     } else {
       setLoginError(result.error || '注册失败');
@@ -750,7 +754,7 @@ const App: React.FC = () => {
         await saveAuditLog(resetLog);
       }
 
-      setRegisterData({ username: '', password: '', confirmPassword: '' });
+      setRegisterData({ username: '', password: '', confirmPassword: '', displayName: '', email: '' });
       setLoginError('');
       setLoginUsername(registerData.username);
       setAuthMode('login');
@@ -1056,7 +1060,7 @@ const App: React.FC = () => {
           parentId: parentId || '', 
           start: parentId ? (strategies.find(s => s.id === parentId)?.start || PROJECT_START) : PROJECT_START, 
           end: parentId ? (strategies.find(s => s.id === parentId)?.end || PROJECT_END) : PROJECT_END, 
-          owner: currentUser?.username || '' 
+          owner: currentUser?.displayName || currentUser?.username || '' 
         } 
       }); 
     } else { 
@@ -1470,6 +1474,10 @@ const App: React.FC = () => {
         onRegisterUsernameChange={(value) => setRegisterData(prev => ({ ...prev, username: value }))}
         onRegisterPasswordChange={(value) => setRegisterData(prev => ({ ...prev, password: value }))}
         onRegisterConfirmPasswordChange={(value) => setRegisterData(prev => ({ ...prev, confirmPassword: value }))}
+        onRegisterDisplayNameChange={(value) => setRegisterData(prev => ({ ...prev, displayName: value }))}
+        onRegisterEmailChange={(value) => setRegisterData(prev => ({ ...prev, email: value }))}
+        registerDisplayName={registerData.displayName}
+        registerEmail={registerData.email}
         onRegister={handleRegister}
         // Forgot password props
         forgotUsername={registerData.username}

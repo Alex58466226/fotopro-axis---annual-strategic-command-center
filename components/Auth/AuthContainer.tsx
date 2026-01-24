@@ -19,10 +19,14 @@ interface AuthContainerProps {
   registerUsername: string;
   registerPassword: string;
   registerConfirmPassword: string;
+  registerDisplayName: string;
+  registerEmail: string;
   registerError: string;
   onRegisterUsernameChange: (value: string) => void;
   onRegisterPasswordChange: (value: string) => void;
   onRegisterConfirmPasswordChange: (value: string) => void;
+  onRegisterDisplayNameChange: (value: string) => void;
+  onRegisterEmailChange: (value: string) => void;
   onRegister: (e: React.FormEvent) => void;
   // Forgot password form props
   forgotUsername: string;
@@ -55,10 +59,14 @@ export const AuthContainer: React.FC<AuthContainerProps> = ({
   registerUsername,
   registerPassword,
   registerConfirmPassword,
+  registerDisplayName,
+  registerEmail,
   registerError,
   onRegisterUsernameChange,
   onRegisterPasswordChange,
   onRegisterConfirmPasswordChange,
+  onRegisterDisplayNameChange,
+  onRegisterEmailChange,
   onRegister,
   // Forgot
   forgotUsername,
@@ -110,10 +118,14 @@ export const AuthContainer: React.FC<AuthContainerProps> = ({
             username={registerUsername}
             password={registerPassword}
             confirmPassword={registerConfirmPassword}
+            displayName={registerDisplayName}
+            email={registerEmail}
             error={registerError}
             onUsernameChange={onRegisterUsernameChange}
             onPasswordChange={onRegisterPasswordChange}
             onConfirmPasswordChange={onRegisterConfirmPasswordChange}
+            onDisplayNameChange={onRegisterDisplayNameChange}
+            onEmailChange={onRegisterEmailChange}
             onSubmit={onRegister}
             onSwitchToLogin={() => {
               onErrorClear();
