@@ -465,7 +465,7 @@ export const MapModal: React.FC<MapModalProps> = ({
             </div>
             <div>
               <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900">
-                Fotopro AMZ 项目管理器
+                富图宝策略看板
               </h2>
               <p className="text-xs font-bold text-orange-500 uppercase tracking-widest mt-1">
                 架构视图 (L1 - L4)

@@ -1691,7 +1691,7 @@ const App: React.FC = () => {
             onFullscreen={() => setFullscreenMode('tasklist')}
             getOwnerDisplayName={getOwnerDisplayName}
           />
-          <footer className="text-center text-[9px] text-slate-300 font-medium py-4">Fotopro AMZ 项目管理器 v2.5 · BUILD {TODAY_STR.replace(/-/g, '')}</footer>
+          <footer className="text-center text-[9px] text-slate-300 font-medium py-4">FOTOPRO STRATEGY AXIS | 富图宝策略看板 v2.5 · BUILD {TODAY_STR.replace(/-/g, '')}</footer>
         </div>
       </main>
       
