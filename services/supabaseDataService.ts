@@ -5,7 +5,9 @@
 
 import { supabase } from './supabaseClient';
 import { StrategyNode, Task, TaskReport, AuditLog, Metric, User, ReportTag } from '../types';
-import { generateId } from '../constants';
+
+// 生成唯一 ID
+const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.floor(Math.random() * 999)}`;
 
 /**
  * 策略数据操作
