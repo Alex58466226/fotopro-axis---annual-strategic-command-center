@@ -1709,6 +1709,7 @@ const App: React.FC = () => {
         }}
         onToggleExpand={toggleNode}
         onStrategyUpdate={updateStrategy}
+        getOwnerDisplayName={getOwnerDisplayName}
         onDragSuccess={(draggedName, targetName, newParentName) => {
           if (draggedName && targetName) {
             if (newParentName) {
