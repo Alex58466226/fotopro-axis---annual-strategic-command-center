@@ -11,6 +11,7 @@ interface UserManagementModalProps {
   onNewUserChange: (field: 'username' | 'password', value: string) => void;
   onAddUser: () => void;
   onDeleteUser: (id: string) => void;
+  onUpdateUser?: (userId: string, updates: { displayName?: string; email?: string }) => void;
 }
 
 /**
@@ -25,7 +26,33 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   onNewUserChange,
   onAddUser,
   onDeleteUser,
+  onUpdateUser,
 }) => {
+  const [editingUserId, setEditingUserId] = React.useState<string | null>(null);
+  const [editDisplayName, setEditDisplayName] = React.useState('');
+  const [editEmail, setEditEmail] = React.useState('');
+
+  const handleStartEdit = (user: User) => {
+    setEditingUserId(user.id);
+    setEditDisplayName(user.displayName || '');
+    setEditEmail(user.email || '');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingUserId(null);
+    setEditDisplayName('');
+    setEditEmail('');
+  };
+
+  const handleSaveEdit = () => {
+    if (editingUserId && onUpdateUser) {
+      onUpdateUser(editingUserId, {
+        displayName: editDisplayName,
+        email: editEmail,
+      });
+      handleCancelEdit();
+    }
+  };
   if (!isOpen || currentUser?.role !== 'Admin') return null;
 
   return (
@@ -95,16 +122,19 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
             <thead className="bg-slate-50 sticky top-0 z-10">
               <tr>
                 <th className="p-4 pl-8 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                  User
+                  用户名
                 </th>
                 <th className="p-4 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                  Role
+                  显示名称
                 </th>
                 <th className="p-4 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                  Password
+                  邮箱
+                </th>
+                <th className="p-4 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                  角色
                 </th>
                 <th className="p-4 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 text-right pr-8">
-                  Actions
+                  操作
                 </th>
               </tr>
             </thead>
@@ -125,6 +155,37 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     </span>
                   </td>
                   <td className="p-4">
+                    {editingUserId === u.id ? (
+                      <input
+                        type="text"
+                        value={editDisplayName}
+                        onChange={e => setEditDisplayName(e.target.value)}
+                        className="w-full p-1.5 text-xs border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none"
+                        placeholder="显示名称"
+                        autoFocus
+                      />
+                    ) : (
+                      <span className="text-xs font-medium text-slate-700">
+                        {u.displayName || u.username || '-'}
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-4">
+                    {editingUserId === u.id ? (
+                      <input
+                        type="email"
+                        value={editEmail}
+                        onChange={e => setEditEmail(e.target.value)}
+                        className="w-full p-1.5 text-xs border border-slate-200 rounded-lg focus:border-indigo-500 focus:outline-none"
+                        placeholder="邮箱"
+                      />
+                    ) : (
+                      <span className="text-xs font-medium text-slate-500">
+                        {u.email || '-'}
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-4">
                     <span
                       className={`text-[10px] font-black uppercase px-2 py-1 rounded ${
                         u.role === 'Admin'
@@ -135,19 +196,46 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       {u.role}
                     </span>
                   </td>
-                  <td className="p-4 text-xs font-mono text-slate-400">
-                    ••••••
-                  </td>
                   <td className="p-4 text-right pr-8">
-                    {u.id !== currentUser?.id && (
-                      <button
-                        onClick={() => onDeleteUser(u.id)}
-                        className="p-2 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-all opacity-0 group-hover:opacity-100"
-                        title="Delete User"
-                      >
-                        <Icon name="trash" size={14} />
-                      </button>
-                    )}
+                    <div className="flex items-center justify-end gap-1">
+                      {editingUserId === u.id ? (
+                        <>
+                          <button
+                            onClick={handleSaveEdit}
+                            className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-500 hover:text-white transition-all"
+                            title="保存"
+                          >
+                            <Icon name="check" size={12} />
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="p-1.5 bg-slate-100 text-slate-500 rounded-lg hover:bg-slate-200 transition-all"
+                            title="取消"
+                          >
+                            <Icon name="close" size={12} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handleStartEdit(u)}
+                            className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-500 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                            title="编辑"
+                          >
+                            <Icon name="edit" size={12} />
+                          </button>
+                          {u.id !== currentUser?.id && (
+                            <button
+                              onClick={() => onDeleteUser(u.id)}
+                              className="p-1.5 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                              title="删除"
+                            >
+                              <Icon name="trash" size={12} />
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

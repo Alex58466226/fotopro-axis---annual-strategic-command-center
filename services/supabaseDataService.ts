@@ -4,7 +4,7 @@
  */
 
 import { supabase } from './supabaseClient';
-import { StrategyNode, Task, TaskReport, AuditLog, Metric } from '../types';
+import { StrategyNode, Task, TaskReport, AuditLog, Metric, User } from '../types';
 
 /**
  * 策略数据操作
@@ -48,7 +48,7 @@ export async function loadStrategies(): Promise<StrategyNode[]> {
       score: row.score !== null && row.score !== undefined ? row.score : undefined,
       reviewComment: row.review_comment || undefined,
     }));
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载策略数据异常:', error);
     return [];
   }
@@ -56,67 +56,43 @@ export async function loadStrategies(): Promise<StrategyNode[]> {
 
 export async function saveStrategies(strategies: StrategyNode[]): Promise<{ success: boolean; error?: string }> {
   try {
-    // 检查 Supabase 配置
-    const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
-    const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
-    
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return { 
-        success: false, 
-        error: 'Supabase 环境变量未配置。请在 .env.local 中配置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY' 
-      };
+    if (strategies.length === 0) {
+      console.log('策略数组为空，跳过保存');
+      return { success: true };
     }
 
-    // 检查用户是否登录
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      return { 
-        success: false, 
-        error: '用户未登录。请先登录后再保存数据。' 
-      };
-    }
-
-    // 转换数据格式
     const rows = strategies.map(s => ({
       id: s.id,
       level: s.level,
       name: s.name,
-      parent_id: s.parentId,
+      parent_id: s.parentId || null,
       start: s.start || null,
       end: s.end || null,
-      owner: s.owner || '',
+      owner: s.owner || null,
       status: s.status || 'active',
-      channel: s.channel || '',
-      product: s.product || '',
+      channel: s.channel || null,
+      product: s.product || null,
       tags: s.tags || [],
-      description: s.description || '',
-      metrics: Array.isArray(s.metrics) ? s.metrics : [],
+      description: s.description || null,
+      metrics: s.metrics || [],
       reviewer: s.reviewer || null,
-      score: s.score !== undefined && s.score !== null ? s.score : null,
+      score: s.score !== null && s.score !== undefined ? s.score : null,
       review_comment: s.reviewComment || null,
-      created_by: session.user.id, // 添加创建者 ID
     }));
 
-    // 使用 upsert 操作（如果存在则更新，不存在则插入）
     const { error } = await supabase
       .from('strategies')
       .upsert(rows, { onConflict: 'id' });
 
     if (error) {
       console.error('保存策略数据失败:', error);
-      console.error('错误详情:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-      });
-      return { success: false, error: error.message || '保存失败' };
+      return { success: false, error: error.message };
     }
 
     return { success: true };
   } catch (error: any) {
     console.error('保存策略数据异常:', error);
-    return { success: false, error: error.message || '保存失败' };
+    return { success: false, error: error.message };
   }
 }
 
@@ -135,7 +111,7 @@ export async function deleteStrategy(strategyId: string): Promise<{ success: boo
     return { success: true };
   } catch (error: any) {
     console.error('删除策略异常:', error);
-    return { success: false, error: error.message || '删除失败' };
+    return { success: false, error: error.message };
   }
 }
 
@@ -144,65 +120,60 @@ export async function deleteStrategy(strategyId: string): Promise<{ success: boo
  */
 export async function loadTasks(): Promise<Task[]> {
   try {
-    // 加载任务
-    const { data: tasksData, error: tasksError } = await supabase
+    const { data, error } = await supabase
       .from('tasks')
       .select('*')
       .order('created_at', { ascending: true });
 
-    if (tasksError) {
-      console.error('加载任务数据失败:', tasksError);
+    if (error) {
+      console.error('加载任务数据失败:', error);
       return [];
     }
 
-    if (!tasksData || tasksData.length === 0) return [];
-
-    // 加载所有报告
-    const { data: reportsData, error: reportsError } = await supabase
-      .from('task_reports')
-      .select('*');
-
-    if (reportsError) {
-      console.error('加载报告数据失败:', reportsError);
+    if (!data) {
+      console.log('Supabase tasks 表为空，返回空数组');
+      return [];
     }
 
-    // 构建报告映射
-    const reportsMap = new Map<string, TaskReport[]>();
-    if (reportsData) {
-      reportsData.forEach((r: any) => {
-        if (!reportsMap.has(r.task_id)) {
-          reportsMap.set(r.task_id, []);
-        }
-        reportsMap.get(r.task_id)!.push({
-          id: r.id,
-          type: r.type as any,
-          content: r.content,
-          timestamp: r.timestamp,
+    console.log('从 Supabase 查询到', data.length, '条任务记录');
+
+    // 转换数据格式
+    return data.map((row: any) => {
+      // 加载任务的报告
+      const reports: TaskReport[] = [];
+      if (row.reports && Array.isArray(row.reports)) {
+        row.reports.forEach((r: any) => {
+          reports.push({
+            id: r.id || generateId('rpt'),
+            type: r.type as ReportTag,
+            content: r.content || '',
+            timestamp: r.timestamp || new Date().toISOString(),
+          });
         });
-      });
-    }
+      }
 
-    // 转换任务数据格式
-    return tasksData.map((row: any) => ({
-      id: row.id,
-      parentId: row.parent_id,
-      rootId: row.root_id,
-      text: row.text,
-      start: row.start || '',
-      end: row.end || '',
-      status: row.status,
-      progress: row.progress || 0,
-      owner: row.owner || '',
-      product: row.product || '',
-      channel: row.channel || '',
-      priority: row.priority || 'P2',
-      reviewer: row.reviewer || '',
-      score: row.score !== null && row.score !== undefined ? row.score : undefined,
-      reviewComment: row.review_comment || '',
-      notes: row.notes || '',
-      reports: reportsMap.get(row.id) || [],
-    }));
-  } catch (error) {
+      return {
+        id: row.id,
+        parentId: row.parent_id,
+        rootId: row.root_id || row.parent_id,
+        text: row.text,
+        status: row.status as TaskStatus,
+        progress: row.progress || 0,
+        priority: row.priority || 'P2',
+        owner: row.owner || '',
+        start: row.start || '',
+        end: row.end || '',
+        product: row.product || '',
+        channel: row.channel || '',
+        score: row.score !== null && row.score !== undefined ? row.score : undefined,
+        reviewer: row.reviewer || undefined,
+        reviewComment: row.review_comment || undefined,
+        notes: row.notes || '',
+        reports,
+        order: row.order !== null && row.order !== undefined ? row.order : undefined,
+      };
+    });
+  } catch (error: any) {
     console.error('加载任务数据异常:', error);
     return [];
   }
@@ -210,79 +181,50 @@ export async function loadTasks(): Promise<Task[]> {
 
 export async function saveTasks(tasks: Task[]): Promise<{ success: boolean; error?: string }> {
   try {
-    // 转换任务数据格式
-    const taskRows = tasks.map(t => ({
+    if (tasks.length === 0) {
+      console.log('任务数组为空，跳过保存');
+      return { success: true };
+    }
+
+    const rows = tasks.map(t => ({
       id: t.id,
       parent_id: t.parentId,
-      root_id: t.rootId,
+      root_id: t.rootId || t.parentId,
       text: t.text,
-      start: t.start || null,
-      end: t.end || null,
       status: t.status,
       progress: t.progress || 0,
-      owner: t.owner || '',
-      product: t.product || '',
-      channel: t.channel || '',
       priority: t.priority || 'P2',
-      reviewer: t.reviewer || '',
-      score: t.score !== undefined && t.score !== null ? t.score : null,
-      review_comment: t.reviewComment || '',
-      notes: t.notes || '',
+      owner: t.owner || null,
+      start: t.start || null,
+      end: t.end || null,
+      product: t.product || null,
+      channel: t.channel || null,
+      score: t.score !== null && t.score !== undefined ? t.score : null,
+      reviewer: t.reviewer || null,
+      review_comment: t.reviewComment || null,
+      notes: t.notes || null,
+      reports: t.reports.map(r => ({
+        id: r.id,
+        type: r.type,
+        content: r.content,
+        timestamp: r.timestamp,
+      })),
+      order: t.order !== null && t.order !== undefined ? t.order : null,
     }));
 
-    // 保存任务
-    const { error: tasksError } = await supabase
+    const { error } = await supabase
       .from('tasks')
-      .upsert(taskRows, { onConflict: 'id' });
+      .upsert(rows, { onConflict: 'id' });
 
-    if (tasksError) {
-      console.error('保存任务数据失败:', tasksError);
-      return { success: false, error: tasksError.message };
-    }
-
-    // 保存报告（先删除所有报告，再重新插入）
-    const allReports: any[] = [];
-    tasks.forEach(task => {
-      if (task.reports && task.reports.length > 0) {
-        task.reports.forEach(report => {
-          allReports.push({
-            id: report.id,
-            task_id: task.id,
-            type: report.type,
-            content: report.content,
-            timestamp: report.timestamp,
-          });
-        });
-      }
-    });
-
-    // 删除所有现有报告
-    const { error: deleteError } = await supabase
-      .from('task_reports')
-      .delete()
-      .neq('id', ''); // 删除所有
-
-    if (deleteError) {
-      console.error('删除报告失败:', deleteError);
-      // 继续执行，不中断
-    }
-
-    // 插入新报告
-    if (allReports.length > 0) {
-      const { error: reportsError } = await supabase
-        .from('task_reports')
-        .insert(allReports);
-
-      if (reportsError) {
-        console.error('保存报告数据失败:', reportsError);
-        return { success: false, error: reportsError.message };
-      }
+    if (error) {
+      console.error('保存任务数据失败:', error);
+      return { success: false, error: error.message };
     }
 
     return { success: true };
   } catch (error: any) {
     console.error('保存任务数据异常:', error);
-    return { success: false, error: error.message || '保存失败' };
+    return { success: false, error: error.message };
   }
 }
 
@@ -301,12 +243,12 @@ export async function deleteTask(taskId: string): Promise<{ success: boolean; er
     return { success: true };
   } catch (error: any) {
     console.error('删除任务异常:', error);
-    return { success: false, error: error.message || '删除失败' };
+    return { success: false, error: error.message };
   }
 }
 
 /**
- * 审计日志操作
+ * 审计日志数据操作
  */
 export async function loadAuditLogs(): Promise<AuditLog[]> {
   try {
@@ -314,26 +256,28 @@ export async function loadAuditLogs(): Promise<AuditLog[]> {
       .from('audit_logs')
       .select('*')
       .order('timestamp', { ascending: false })
-      .limit(500); // 限制最多 500 条
+      .limit(500);
 
     if (error) {
       console.error('加载审计日志失败:', error);
       return [];
     }
 
-    if (!data) return [];
+    if (!data) {
+      return [];
+    }
 
     return data.map((row: any) => ({
       id: row.id,
       userId: row.user_id || '',
       userName: row.user_name || '',
       action: row.action,
-      targetType: row.target_type || '',
-      targetName: row.target_name || '',
+      targetType: row.target_type,
+      targetName: row.target_name,
       details: row.details || '',
       timestamp: row.timestamp,
     }));
-  } catch (error) {
+  } catch (error: any) {
     console.error('加载审计日志异常:', error);
     return [];
   }
@@ -341,18 +285,20 @@ export async function loadAuditLogs(): Promise<AuditLog[]> {
 
 export async function saveAuditLog(log: AuditLog): Promise<{ success: boolean; error?: string }> {
   try {
+    const row = {
+      id: log.id,
+      user_id: log.userId || null,
+      user_name: log.userName,
+      action: log.action,
+      target_type: log.targetType,
+      target_name: log.targetName,
+      details: log.details,
+      timestamp: log.timestamp,
+    };
+
     const { error } = await supabase
       .from('audit_logs')
-      .insert({
-        id: log.id,
-        user_id: log.userId || null,
-        user_name: log.userName,
-        action: log.action,
-        target_type: log.targetType,
-        target_name: log.targetName,
-        details: log.details,
-        timestamp: log.timestamp,
-      });
+      .upsert(row, { onConflict: 'id' });
 
     if (error) {
       console.error('保存审计日志失败:', error);
@@ -394,5 +340,38 @@ export async function saveAuditLogs(logs: AuditLog[]): Promise<{ success: boolea
   } catch (error: any) {
     console.error('保存审计日志异常:', error);
     return { success: false, error: error.message || '保存失败' };
+  }
+}
+
+/**
+ * 更新用户 Profile 信息（显示名称和邮箱）
+ */
+export async function updateUserProfile(
+  userId: string,
+  updates: { displayName?: string; email?: string }
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const updateData: any = {};
+    if (updates.displayName !== undefined) {
+      updateData.display_name = updates.displayName.trim() || null;
+    }
+    if (updates.email !== undefined) {
+      updateData.email = updates.email.trim() || null;
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update(updateData)
+      .eq('id', userId);
+
+    if (error) {
+      console.error('更新用户信息失败:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('更新用户信息异常:', error);
+    return { success: false, error: error.message };
   }
 }

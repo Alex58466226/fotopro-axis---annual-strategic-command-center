@@ -47,6 +47,7 @@ import {
   loadAuditLogs,
   saveAuditLog,
   saveAuditLogs,
+  updateUserProfile,
 } from './services/supabaseDataService';
 import { supabase } from './services/supabaseClient';
 import {
@@ -874,6 +875,48 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateUser = async (userId: string, updates: { displayName?: string; email?: string }) => {
+    try {
+      const result = await updateUserProfile(userId, updates);
+      
+      if (result.success) {
+        // 重新加载用户列表
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('*')
+          .order('created_at', { ascending: true });
+
+        if (profiles) {
+          const usersList: User[] = profiles.map((p: any) => ({
+            id: p.id,
+            username: p.username,
+            password: '',
+            role: p.role as 'Admin' | 'User' | 'Viewer',
+            avatarColor: p.avatar_color,
+            displayName: p.display_name || p.username,
+            email: p.email || undefined,
+          }));
+          setUsers(usersList);
+          
+          // 如果更新的是当前用户，更新 currentUser
+          if (userId === currentUser?.id) {
+            const updatedUser = usersList.find(u => u.id === userId);
+            if (updatedUser) {
+              setCurrentUser(updatedUser);
+            }
+          }
+        }
+
+        showToast('success', '用户信息更新成功！');
+      } else {
+        showToast('error', `更新失败: ${result.error || '未知错误'}`);
+      }
+    } catch (error: any) {
+      console.error('更新用户信息异常:', error);
+      showToast('error', `更新失败: ${error.message || '未知错误'}`);
+    }
+  };
+
   const handleDeleteUser = async (id: string) => {
     if (id === currentUser?.id) {
       showToast('error', '不能删除当前登录的用户');
@@ -1673,6 +1716,7 @@ const App: React.FC = () => {
         }
         onAddUser={handleAddUser}
         onDeleteUser={handleDeleteUser}
+        onUpdateUser={handleUpdateUser}
       />
 
       <AuditLogModal
