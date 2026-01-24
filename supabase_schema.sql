@@ -6,6 +6,8 @@
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username TEXT UNIQUE NOT NULL,
+  display_name TEXT, -- 显示名称（用于 owner 字段）
+  email TEXT, -- 注册邮箱（与登录用户名分开）
   role TEXT NOT NULL DEFAULT 'User' CHECK (role IN ('Admin', 'User', 'Viewer')),
   avatar_color TEXT NOT NULL DEFAULT 'bg-slate-500',
   created_at TIMESTAMPTZ DEFAULT NOW(),
