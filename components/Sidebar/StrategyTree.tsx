@@ -13,6 +13,7 @@ interface StrategyTreeProps {
   onNodeEdit: (e: React.MouseEvent, node: StrategyNode) => void;
   onTaskClick: (e: React.MouseEvent, task: Task) => void;
   onToggleExpand: (e: React.MouseEvent, nodeId: string) => void;
+  getOwnerDisplayName?: (owner: string) => string; // 新增：获取 owner 显示名称
 }
 
 /**
@@ -28,6 +29,7 @@ export const StrategyTree: React.FC<StrategyTreeProps> = ({
   onNodeEdit,
   onTaskClick,
   onToggleExpand,
+  getOwnerDisplayName,
 }) => {
   const childStrategies = strategies.filter(s => s.parentId === node.id);
   const childTasks = tasks.filter(t => t.parentId === node.id);
@@ -45,6 +47,7 @@ export const StrategyTree: React.FC<StrategyTreeProps> = ({
         onNodeClick={() => onNodeClick(node.id)}
         onEditClick={(e) => onNodeEdit(e, node)}
         onToggleExpand={(e) => onToggleExpand(e, node.id)}
+        getOwnerDisplayName={getOwnerDisplayName}
       />
       {isExpanded && hasChildren && (
         <div className="border-l border-slate-100 ml-2">

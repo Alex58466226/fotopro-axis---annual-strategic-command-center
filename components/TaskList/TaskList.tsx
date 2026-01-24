@@ -43,6 +43,7 @@ interface TaskListProps {
   onLoadSuggestions: (customPrompt?: string) => void; // 更新：支持自定义提示词
   onTasksReorder?: (tasks: Task[]) => void; // 新增：拖拽排序回调
   onFullscreen?: () => void; // 新增：全屏回调
+  getOwnerDisplayName?: (owner: string) => string; // 新增：获取 owner 显示名称
 }
 
 export const STATUS_CONFIG: Record<TaskStatus, { label: string; color: string; bg: string; icon: string }> = {
@@ -89,6 +90,7 @@ export const TaskList: React.FC<TaskListProps> = ({
   onLoadSuggestions,
   onTasksReorder,
   onFullscreen,
+  getOwnerDisplayName,
 }) => {
   const [showSuggestions, setShowSuggestions] = React.useState(false);
   const [showChatInput, setShowChatInput] = React.useState(false);
@@ -412,6 +414,7 @@ export const TaskList: React.FC<TaskListProps> = ({
                       key={task.id}
                       task={task}
                       isFilterActive={isFilterActive}
+                      getOwnerDisplayName={getOwnerDisplayName}
                       onTaskUpdate={onTaskUpdate}
                       onTaskEdit={onTaskEdit}
                       onTaskDelete={onTaskDelete}

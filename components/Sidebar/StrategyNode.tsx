@@ -10,6 +10,7 @@ interface StrategyNodeComponentProps {
   onNodeClick: () => void;
   onEditClick: (e: React.MouseEvent) => void;
   onToggleExpand: (e: React.MouseEvent) => void;
+  getOwnerDisplayName?: (owner: string) => string; // 新增：获取 owner 显示名称
 }
 
 /**
@@ -23,6 +24,7 @@ export const StrategyNodeComponent: React.FC<StrategyNodeComponentProps> = ({
   onNodeClick,
   onEditClick,
   onToggleExpand,
+  getOwnerDisplayName,
 }) => {
   return (
     <div className="relative pl-4">
@@ -113,17 +115,20 @@ export const StrategyNodeComponent: React.FC<StrategyNodeComponentProps> = ({
               </>
             )}
             {/* 负责人 */}
-            {node.owner && (
-              <span
-                className={`text-[8px] font-medium flex items-center gap-0.5 truncate max-w-[50px] ${
-                  isSelected ? 'text-slate-300' : 'text-slate-500'
-                }`}
-                title={node.owner}
-              >
-                <Icon name="user" size={9} />
-                {node.owner.length > 4 ? node.owner.slice(0, 4) + '...' : node.owner}
-              </span>
-            )}
+            {node.owner && (() => {
+              const displayName = getOwnerDisplayName ? getOwnerDisplayName(node.owner) : node.owner;
+              return (
+                <span
+                  className={`text-[8px] font-medium flex items-center gap-0.5 truncate max-w-[50px] ${
+                    isSelected ? 'text-slate-300' : 'text-slate-500'
+                  }`}
+                  title={displayName}
+                >
+                  <Icon name="user" size={9} />
+                  {displayName.length > 4 ? displayName.slice(0, 4) + '...' : displayName}
+                </span>
+              );
+            })()}
             {/* 结束日期 */}
             {node.end && (
               <span

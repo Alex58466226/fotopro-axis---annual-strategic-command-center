@@ -19,6 +19,7 @@ interface TaskItemProps {
   onTaskUpdate: (id: string, updates: Partial<Task>) => void;
   onTaskEdit: (e: React.MouseEvent, task: Task) => void;
   onTaskDelete: (e: React.MouseEvent, id: string) => void;
+  getOwnerDisplayName?: (owner: string) => string; // 新增：获取 owner 显示名称
 }
 
 /**
@@ -30,6 +31,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({
   onTaskUpdate,
   onTaskEdit,
   onTaskDelete,
+  getOwnerDisplayName,
 }) => {
   const {
     attributes,
@@ -190,7 +192,9 @@ export const TaskItem: React.FC<TaskItemProps> = ({
       />
 
       {/* Owner */}
-      <div className="text-[11px] text-[#787774] truncate">{task.owner || '-'}</div>
+      <div className="text-[11px] text-[#787774] truncate">
+        {getOwnerDisplayName ? getOwnerDisplayName(task.owner) : (task.owner || '-')}
+      </div>
 
       {/* Actions */}
       <div className="flex items-center justify-center gap-2">

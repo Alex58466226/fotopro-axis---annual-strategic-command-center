@@ -1063,8 +1063,22 @@ const App: React.FC = () => {
         return true;
     }).sort((a, b) => a.level - b.level || a.start.localeCompare(b.start));
   }, [strategies, filters, activeBranchIds]);
+  // 工具函数：将 owner（可能是 username 或 displayName）转换为显示名称
+  const getOwnerDisplayName = useCallback((owner: string): string => {
+    if (!owner) return '';
+    // 首先尝试通过 displayName 匹配
+    const userByDisplayName = users.find(u => u.displayName === owner);
+    if (userByDisplayName) return userByDisplayName.displayName || userByDisplayName.username;
+    // 然后尝试通过 username 匹配
+    const userByUsername = users.find(u => u.username === owner);
+    if (userByUsername) return userByUsername.displayName || userByUsername.username;
+    // 如果都找不到，返回原始值
+    return owner;
+  }, [users]);
+
   const activeTasks = useMemo(() => {
       return allBranchTasks.filter(t => {
+          // 过滤时使用原始 owner 值进行比较
           if (filters.owner !== 'all' && t.owner !== filters.owner) return false;
           if (filters.channel !== 'all' && t.channel !== filters.channel) return false;
           if (filters.product !== 'all' && t.product !== filters.product) return false;
@@ -1210,7 +1224,7 @@ const App: React.FC = () => {
   };
   const addTask = () => {
     let root = activeNode; while (root.parentId) { const p = strategies.find(s => s.id === root.parentId); if (p) root = p; else break; }
-    const newTask: Task = { id: generateId('t'), parentId: activeNodeId, rootId: root.id, text: '新任务', start: TODAY_STR, end: TODAY_STR, status: 'todo', progress: 0, owner: currentUser?.username || '', product: '', channel: '', priority: 'P2', notes: '', reports: [] };
+    const newTask: Task = { id: generateId('t'), parentId: activeNodeId, rootId: root.id, text: '新任务', start: TODAY_STR, end: TODAY_STR, status: 'todo', progress: 0, owner: currentUser?.displayName || currentUser?.username || '', product: '', channel: '', priority: 'P2', notes: '', reports: [] };
     setTasks(prev => [...prev, newTask]); addLog('CREATE', 'TASK', '新任务', `Added task to ${activeNode.name}`);
   };
   // 处理数据导入
@@ -1598,6 +1612,7 @@ const App: React.FC = () => {
         onImportData={() => setIsImportModalOpen(true)}
         onExportCSV={() => exportToCSV(activeTasks, strategies, filteredStrategies, showToast)}
         onDeleteStrategy={deleteActiveStrategy}
+        getOwnerDisplayName={getOwnerDisplayName}
       />
 
       <main className="flex-1 flex flex-col min-w-0 bg-[#F7F6F3]">
@@ -1674,6 +1689,7 @@ const App: React.FC = () => {
             onLoadSuggestions={loadTaskSuggestions}
             onTasksReorder={handleTasksReorder}
             onFullscreen={() => setFullscreenMode('tasklist')}
+            getOwnerDisplayName={getOwnerDisplayName}
           />
           <footer className="text-center text-[9px] text-slate-300 font-medium py-4">Fotopro AMZ 项目管理器 v2.5 · BUILD {TODAY_STR.replace(/-/g, '')}</footer>
         </div>

@@ -26,6 +26,7 @@ interface SidebarProps {
   onImportData: () => void;
   onExportCSV: () => void;
   onDeleteStrategy: () => void;
+  getOwnerDisplayName?: (owner: string) => string; // 新增：获取 owner 显示名称
 }
 
 /**
@@ -53,6 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onImportData,
   onExportCSV,
   onDeleteStrategy,
+  getOwnerDisplayName,
 }) => {
   const topLevelStrategies = strategies.filter(s => s.level === 1);
 

@@ -36,6 +36,7 @@ interface MapModalProps {
   onToggleExpand: (e: React.MouseEvent, nodeId: string) => void;
   onStrategyUpdate?: (id: string, updates: Partial<StrategyNode>) => void; // 新增：策略更新回调（用于拖拽）
   onDragSuccess?: (draggedName: string, targetName: string, newParentName?: string) => void; // 新增：拖拽成功回调
+  getOwnerDisplayName?: (owner: string) => string; // 新增：获取 owner 显示名称
 }
 
 /**
@@ -53,6 +54,7 @@ export const MapModal: React.FC<MapModalProps> = ({
   onToggleExpand,
   onStrategyUpdate,
   onDragSuccess,
+  getOwnerDisplayName,
   isFullscreen = false,
 }) => {
   if (!isOpen) return null;
@@ -320,12 +322,15 @@ export const MapModal: React.FC<MapModalProps> = ({
                 </>
               )}
               {/* 负责人 */}
-              {node.owner && (
-                <span className="text-[9px] font-medium text-slate-500 flex items-center gap-1">
-                  <Icon name="user" size={10} />
-                  {node.owner}
-                </span>
-              )}
+              {node.owner && (() => {
+                const displayName = getOwnerDisplayName ? getOwnerDisplayName(node.owner) : node.owner;
+                return (
+                  <span className="text-[9px] font-medium text-slate-500 flex items-center gap-1">
+                    <Icon name="user" size={10} />
+                    {displayName}
+                  </span>
+                );
+              })()}
               {/* 渠道 */}
               {node.channel && (
                 <span className="text-[9px] font-medium text-slate-500 px-1.5 py-0.5 bg-slate-50 rounded">
@@ -341,7 +346,7 @@ export const MapModal: React.FC<MapModalProps> = ({
             </div>
             <div className={`flex items-center ${currentSize.gap} text-[10px] text-slate-500 font-medium pt-1.5 border-t border-slate-50`}>
               <span className="flex items-center gap-1">
-                <Icon name="user" size={12} /> {node.owner || 'Unassigned'}
+                <Icon name="user" size={12} /> {getOwnerDisplayName ? (node.owner ? getOwnerDisplayName(node.owner) : 'Unassigned') : (node.owner || 'Unassigned')}
               </span>
               <span className="flex items-center gap-1">
                 <Icon name="calendar" size={12} /> {node.end}
