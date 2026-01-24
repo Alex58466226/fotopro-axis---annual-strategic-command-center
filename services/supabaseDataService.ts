@@ -4,7 +4,8 @@
  */
 
 import { supabase } from './supabaseClient';
-import { StrategyNode, Task, TaskReport, AuditLog, Metric, User } from '../types';
+import { StrategyNode, Task, TaskReport, AuditLog, Metric, User, ReportTag } from '../types';
+import { generateId } from '../constants';
 
 /**
  * 策略数据操作
@@ -137,20 +138,44 @@ export async function loadTasks(): Promise<Task[]> {
 
     console.log('从 Supabase 查询到', data.length, '条任务记录');
 
+    // 获取所有任务的 ID
+    const taskIds = data.map((row: any) => row.id);
+
+    // 从 task_reports 表加载所有报告
+    let allReports: any[] = [];
+    if (taskIds.length > 0) {
+      const { data: reportsData, error: reportsError } = await supabase
+        .from('task_reports')
+        .select('*')
+        .in('task_id', taskIds)
+        .order('timestamp', { ascending: true });
+
+      if (reportsError) {
+        console.error('加载任务报告失败:', reportsError);
+      } else if (reportsData) {
+        allReports = reportsData;
+        console.log('从 Supabase 查询到', allReports.length, '条报告记录');
+      }
+    }
+
+    // 按 task_id 分组报告
+    const reportsByTaskId = new Map<string, TaskReport[]>();
+    allReports.forEach((r: any) => {
+      if (!reportsByTaskId.has(r.task_id)) {
+        reportsByTaskId.set(r.task_id, []);
+      }
+      reportsByTaskId.get(r.task_id)!.push({
+        id: r.id,
+        type: r.type as ReportTag,
+        content: r.content || '',
+        timestamp: r.timestamp || new Date().toISOString(),
+      });
+    });
+
     // 转换数据格式
     return data.map((row: any) => {
-      // 加载任务的报告
-      const reports: TaskReport[] = [];
-      if (row.reports && Array.isArray(row.reports)) {
-        row.reports.forEach((r: any) => {
-          reports.push({
-            id: r.id || generateId('rpt'),
-            type: r.type as ReportTag,
-            content: r.content || '',
-            timestamp: r.timestamp || new Date().toISOString(),
-          });
-        });
-      }
+      // 从分组中获取该任务的报告
+      const reports = reportsByTaskId.get(row.id) || [];
 
       return {
         id: row.id,
@@ -186,6 +211,7 @@ export async function saveTasks(tasks: Task[]): Promise<{ success: boolean; erro
       return { success: true };
     }
 
+    // 准备任务数据（不包含 reports）
     const rows = tasks.map(t => ({
       id: t.id,
       parent_id: t.parentId,
@@ -203,23 +229,81 @@ export async function saveTasks(tasks: Task[]): Promise<{ success: boolean; erro
       reviewer: t.reviewer || null,
       review_comment: t.reviewComment || null,
       notes: t.notes || null,
-      reports: t.reports.map(r => ({
-        id: r.id,
-        type: r.type,
-        content: r.content,
-        timestamp: r.timestamp,
-      })),
-      // order 字段：如果未定义，设置为 null（允许数据库使用默认值）
+      // order 字段：如果未定义，不包含该字段
       ...(t.order !== null && t.order !== undefined ? { order: t.order } : {}),
     }));
 
-    const { error } = await supabase
+    // 保存任务数据
+    const { error: tasksError } = await supabase
       .from('tasks')
       .upsert(rows, { onConflict: 'id' });
 
-    if (error) {
-      console.error('保存任务数据失败:', error);
-      return { success: false, error: error.message };
+    if (tasksError) {
+      console.error('保存任务数据失败:', tasksError);
+      return { success: false, error: tasksError.message };
+    }
+
+    // 准备报告数据
+    const reportRows: Array<{
+      id: string;
+      task_id: string;
+      type: string;
+      content: string;
+      timestamp: string;
+    }> = [];
+
+    tasks.forEach(task => {
+      if (task.reports && Array.isArray(task.reports)) {
+        task.reports.forEach(report => {
+          reportRows.push({
+            id: report.id || generateId('rpt'),
+            task_id: task.id,
+            type: report.type,
+            content: report.content || '',
+            timestamp: report.timestamp || new Date().toISOString(),
+          });
+        });
+      }
+    });
+
+    // 保存报告数据（先删除旧报告，再插入新报告）
+    if (reportRows.length > 0) {
+      const taskIds = tasks.map(t => t.id);
+      
+      // 删除这些任务的所有旧报告
+      const { error: deleteError } = await supabase
+        .from('task_reports')
+        .delete()
+        .in('task_id', taskIds);
+
+      if (deleteError) {
+        console.error('删除旧报告失败:', deleteError);
+        // 继续执行，不中断流程
+      }
+
+      // 插入新报告
+      const { error: reportsError } = await supabase
+        .from('task_reports')
+        .insert(reportRows);
+
+      if (reportsError) {
+        console.error('保存任务报告失败:', reportsError);
+        return { success: false, error: reportsError.message };
+      }
+    } else {
+      // 如果没有报告，删除所有相关任务的旧报告
+      const taskIds = tasks.map(t => t.id);
+      if (taskIds.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('task_reports')
+          .delete()
+          .in('task_id', taskIds);
+
+        if (deleteError) {
+          console.error('删除旧报告失败:', deleteError);
+          // 继续执行，不中断流程
+        }
+      }
     }
 
     return { success: true };
