@@ -537,6 +537,8 @@ const App: React.FC = () => {
             password: '', // 不再存储密码
             role: p.role as 'Admin' | 'User' | 'Viewer',
             avatarColor: p.avatar_color,
+            displayName: p.display_name || p.username, // 显示名称
+            email: p.email || undefined, // 注册邮箱
           }));
           setUsers(usersList);
         } else if (profilesError) {
@@ -708,6 +710,8 @@ const App: React.FC = () => {
           password: '',
           role: p.role as 'Admin' | 'User' | 'Viewer',
           avatarColor: p.avatar_color,
+          displayName: p.display_name || p.username, // 显示名称
+          email: p.email || undefined, // 注册邮箱
         }));
         setUsers(usersList);
       }
@@ -854,6 +858,8 @@ const App: React.FC = () => {
           password: '',
           role: p.role as 'Admin' | 'User' | 'Viewer',
           avatarColor: p.avatar_color,
+          displayName: p.display_name || p.username, // 显示名称
+          email: p.email || undefined, // 注册邮箱
         }));
         setUsers(usersList);
       }
