@@ -372,6 +372,18 @@ export async function saveTasks(tasks: Task[]): Promise<{ success: boolean; erro
 
 export async function deleteTask(taskId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    // 先删除 task_reports（虽然数据库有 CASCADE，但显式删除更安全）
+    const { error: reportsError } = await supabase
+      .from('task_reports')
+      .delete()
+      .eq('task_id', taskId);
+
+    if (reportsError) {
+      console.warn('删除任务报告时出现警告（可能已通过 CASCADE 删除）:', reportsError);
+      // 不阻止继续删除任务，因为 CASCADE 可能已经处理了
+    }
+
+    // 删除任务（如果数据库有 CASCADE，task_reports 会自动删除）
     const { error } = await supabase
       .from('tasks')
       .delete()

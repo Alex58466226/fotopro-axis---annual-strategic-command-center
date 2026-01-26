@@ -1340,7 +1340,35 @@ const App: React.FC = () => {
       return newTasks;
     });
   };
-  const deleteTask = (e: React.MouseEvent, id: string) => { e.stopPropagation(); const task = tasks.find(t => t.id === id); safeConfirm("删除执行任务", "确认删除此任务？该操作无法撤销。", () => { if (task) addLog('DELETE', 'TASK', task.text, 'Deleted task'); setTasks(prev => prev.filter(t => t.id !== id)); setConfirmState(prev => ({...prev, isOpen: false})); }); };
+  const deleteTask = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    
+    safeConfirm("删除执行任务", "确认删除此任务？该操作无法撤销。", async () => {
+      try {
+        // 先从 Supabase 数据库中删除任务（会级联删除 task_reports）
+        const result = await deleteTaskFromSupabase(id);
+        
+        if (!result.success) {
+          console.error('删除任务失败:', result.error);
+          showToast('error', `删除任务失败: ${result.error || '未知错误'}`);
+          setConfirmState(prev => ({...prev, isOpen: false}));
+          return;
+        }
+        
+        // 删除成功，更新本地状态
+        setTasks(prev => prev.filter(t => t.id !== id));
+        addLog('DELETE', 'TASK', task.text, 'Deleted task');
+        showToast('success', '任务已删除');
+        setConfirmState(prev => ({...prev, isOpen: false}));
+      } catch (error: any) {
+        console.error('删除任务异常:', error);
+        showToast('error', `删除任务失败: ${error.message || '未知错误'}`);
+        setConfirmState(prev => ({...prev, isOpen: false}));
+      }
+    });
+  };
   const openTaskEdit = (e: React.MouseEvent, task: Task) => { e.stopPropagation(); setTaskModal({ isOpen: true, data: { ...task, reports: task.reports || [] } }); };
   const saveTaskFromModal = () => { 
     if (!taskModal.data) return; 
