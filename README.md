@@ -41,7 +41,13 @@ View your app in AI Studio: https://ai.studio/apps/drive/1OiZMrbFIFgSpyc3Hnc603S
 
 ## 文档
 
-- 📖 [产品使用手册](./PRODUCT_MANUAL.md) - 完整的产品功能说明和使用指南
-- 🔧 [开发指引](./DEVELOPER_GUIDE.md) - 开发者文档，包含架构说明和扩展指南
-- 🤖 [AI 配置说明](./AI_CONFIG.md) - AI 模型配置和 API Key 设置
-- 🐛 [修复记录](./FIXES.md) - 已知问题和修复记录
+所有文档已按类别整理到 `docs/` 目录，详见 [文档索引](./docs/README.md)。
+
+### 快速导航
+- 📖 [产品使用手册](./docs/product/PRODUCT_MANUAL.md) - 完整的产品功能说明和使用指南
+- 🔧 [开发指引](./docs/development/DEVELOPER_GUIDE.md) - 开发者文档，包含架构说明和扩展指南
+- 🤖 [AI 配置说明](./docs/ai/AI_CONFIG.md) - AI 模型配置和 API Key 设置
+- 🚀 [部署指南](./docs/deployment/DEPLOYMENT_GUIDE.md) - 部署流程和环境配置
+- 🧪 [测试文档](./docs/tests/) - 测试清单和测试报告
+- 🐛 [调试文档](./docs/debug/) - 问题诊断和故障排除
+- 📚 [完整文档索引](./docs/README.md) - 所有文档分类索引
